@@ -4,7 +4,8 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { ApiService } from '../../../../core/services/api.service';
 import { Subject, takeUntil, debounceTime, distinctUntilChanged } from 'rxjs';
 import { FamilyMember } from './family-tree.model';
 import { FamilyTreeService } from './family-tree.service';
@@ -22,6 +23,7 @@ export interface Connection {
   x1: number; y1: number;
   x2: number; y2: number;
   type: 'parent-child' | 'spouse';
+  parentId?: string;
 }
 
 @Component({
@@ -51,6 +53,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   ghostX = 0;
   ghostY = 0;
   dropTargetId: string | null = null;
+  dropTargetCouple: { maleId: string; femaleId: string } | null = null;
   dragStartX = 0;
   dragStartY = 0;
   isDragging = false;
@@ -60,8 +63,8 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   isFamilyFocused = false;
   focusedCoupleName = '';
 
-  readonly NODE_W = 140;
-  readonly NODE_H = 64;
+  readonly NODE_W = 120;
+  readonly NODE_H = 55;
   readonly GEN_GAP = 120;
   readonly H_GAP = 30;
 
@@ -73,13 +76,18 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private searchSubject = new Subject<string>();
+  private history: FamilyMember[][] = [];
+  private historyIndex = -1;
   loading = false;
   error: string | null = null;
+  canUndo = false;
 
   constructor(
     public svc: FamilyTreeService,
     private cdr: ChangeDetectorRef,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private apiService: ApiService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -123,7 +131,6 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   // ─── Drag via mousedown/mousemove/mouseup ─────────────────────────
 
   onMouseDown(event: MouseEvent, node: TreeNode): void {
-    if (node.member.gender !== 'female') return;
     event.preventDefault();
 
     this.draggingNode = node;
@@ -152,16 +159,38 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     this.ghostX = (event.clientX - svgRect.left) / zoom;
     this.ghostY = (event.clientY - svgRect.top) / zoom;
 
-    // Trouver le nœud homme sous le curseur
+    // Trouver le nœud homme ou la liaison sous le curseur
     this.dropTargetId = null;
-    for (const node of this.nodes) {
-      if (node.member.gender !== 'male') continue;
-      if (
-        this.ghostX >= node.x && this.ghostX <= node.x + this.NODE_W &&
-        this.ghostY >= node.y && this.ghostY <= node.y + this.NODE_H
-      ) {
-        this.dropTargetId = node.member.id;
-        break;
+    this.dropTargetCouple = null;
+
+    // Vérifier les liaisons (pour ajouter un enfant à un couple)
+    const tolerance = 10;
+    for (const connection of this.connections) {
+      const dist = this.distanceToLine(this.ghostX, this.ghostY, connection.x1, connection.y1, connection.x2, connection.y2);
+      if (dist < tolerance) {
+        if (connection.type === 'spouse') {
+          // Trouver le couple (homme et femme)
+          const maleNode = this.nodes.find(n => Math.abs(n.x + this.NODE_W - connection.x1) < 2);
+          const femaleNode = this.nodes.find(n => Math.abs(n.x - connection.x2) < 2);
+          if (maleNode && femaleNode) {
+            this.dropTargetCouple = { maleId: maleNode.member.id, femaleId: femaleNode.member.id };
+            break;
+          }
+        }
+      }
+    }
+
+    // Sinon, chercher un nœud homme pour lier comme couple
+    if (!this.dropTargetCouple) {
+      for (const node of this.nodes) {
+        if (node.member.gender !== 'male') continue;
+        if (
+          this.ghostX >= node.x && this.ghostX <= node.x + this.NODE_W &&
+          this.ghostY >= node.y && this.ghostY <= node.y + this.NODE_H
+        ) {
+          this.dropTargetId = node.member.id;
+          break;
+        }
       }
     }
 
@@ -172,29 +201,77 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   onMouseUp(event: MouseEvent): void {
     if (!this.draggingNode) return;
 
-    if (this.isDragging && this.dropTargetId) {
+    const dossierId = this.svc.getCurrentDossierId();
+
+    // Cas 1: Dragger sur une liaison pour ajouter/modifier les parents
+    if (this.isDragging && this.dropTargetCouple) {
+      const member = this.draggingNode.member;
+      console.log('🎯 Drag sur liaison - Membre:', member.firstName, member.lastName);
+      console.log('   Parents actuels:', member.parentIds);
+      console.log('   Couple cible:', this.dropTargetCouple);
+
+      // Vérifier si le membre a déjà des parents
+      if (member.parentIds && member.parentIds.length > 0) {
+        // Demander confirmation pour remplacer les parents
+        const children = this.svc.getChildren(member.id);
+        const hasChildren = children.length > 0;
+        console.log('   Enfants détectés:', children.length);
+
+        const message = hasChildren
+          ? `${member.firstName} ${member.lastName} a ${children.length} enfant(s). Voulez-vous ajouter des parents et créer une nouvelle généra-parent ?`
+          : `${member.firstName} ${member.lastName} a déjà des parents. Voulez-vous les modifier ?`;
+
+        if (confirm(message)) {
+          console.log('✅ Confirmation accordée - Ajout des parents');
+          this.addParentsToMember(dossierId, member.id, this.dropTargetCouple.maleId, this.dropTargetCouple.femaleId);
+        } else {
+          console.log('❌ Confirmation refusée');
+        }
+      } else {
+        // Pas de parents, ajouter simplement les nouveaux parents
+        console.log('✅ Pas de parents actuels - Ajout des nouveaux parents');
+        this.addParentsToMember(dossierId, member.id, this.dropTargetCouple.maleId, this.dropTargetCouple.femaleId);
+      }
+    }
+    // Cas 2: Dragger une femme sur un homme pour les lier
+    else if (this.isDragging && this.dropTargetId) {
       const female = this.draggingNode.member;
       const male = this.svc.getById(this.dropTargetId);
 
-      if (male && male.gender === 'male') {
-        // Lier comme couple
-        const maleWithSpouse = { ...male, spouseId: female.id };
-        const femaleWithSpouse = { ...female, spouseId: male.id };
-        
-        this.svc.updateMember(maleWithSpouse).pipe(takeUntil(this.destroy$)).subscribe(
-          () => {
-            this.svc.updateMember(femaleWithSpouse).pipe(takeUntil(this.destroy$)).subscribe(
-              () => {
-                // Focus sur la famille
-                this.focusOnFamily(male.id, female.id);
-                this.cdr.markForCheck();
-              },
-              error => console.error('Error updating couple:', error)
-            );
-          },
-          error => console.error('Error updating couple:', error)
-        );
+      if (male && male.gender === 'male' && female.gender === 'female') {
+        if (!dossierId) {
+          console.error('Dossier ID not available');
+          return;
+        }
+        // Lier comme couple via API
+        this.saveState();
+        this.apiService.linkCouple(dossierId, male.id, female.id)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: () => {
+              // Mettre à jour les données locales
+              const updatedMale = { ...male, spouseId: female.id };
+              const updatedFemale = { ...female, spouseId: male.id };
+
+              const current = this.allMembers.map(m =>
+                m.id === male.id ? updatedMale : (m.id === female.id ? updatedFemale : m)
+              );
+              this.allMembers = current;
+              this.svc['membersSubject'].next(current);
+
+              // Focus sur la famille
+              this.focusOnFamily(male.id, female.id);
+              this.cdr.markForCheck();
+            },
+            error: (err: any) => {
+              console.error('Erreur lors de la création du couple:', err);
+              alert('Erreur lors de la création du couple');
+            }
+          });
       }
+    } else if (this.isDragging && this.draggingNode) {
+      // Drag horizontal sans drop target → réorganiser l'ordre des frères
+      this.reorderSiblings(this.draggingNode);
     } else if (!this.isDragging && this.draggingNode) {
       // Simple clic → sélection
       this.selectMemberById(this.draggingNode.member.id);
@@ -202,6 +279,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
 
     this.draggingNode = null;
     this.dropTargetId = null;
+    this.dropTargetCouple = null;
     this.isDragging = false;
     this.cdr.markForCheck();
   }
@@ -274,8 +352,16 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
       if (visited.has(id)) return 0;
       visited.add(id);
       const m = this.svc.getById(id);
-      if (!m?.parentIds?.length) return 0;
-      return 1 + Math.max(...m.parentIds.map(pid => getGen(pid, new Set(visited))));
+
+      if (m?.parentIds?.length) {
+        return 1 + Math.max(...m.parentIds.map(pid => getGen(pid, new Set(visited))));
+      }
+
+      if (m?.spouseId) {
+        return getGen(m.spouseId, new Set(visited));
+      }
+
+      return 0;
     };
 
     const generationGroups = new Map<number, FamilyMember[]>();
@@ -288,20 +374,94 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     const svgW = this.calculateWidth(generationGroups);
 
     generationGroups.forEach((group, gen) => {
-      const totalW = group.length * this.NODE_W + (group.length - 1) * this.H_GAP;
-      const startX = (svgW - totalW) / 2;
-      group.forEach((m, i) => {
-        nodeMap.set(m.id, {
-          member: m,
-          x: startX + i * (this.NODE_W + this.H_GAP),
-          y: gen * (this.NODE_H + this.GEN_GAP) + 40,
-          generation: gen,
-        });
+      group.sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+      console.log(`Génération ${gen}:`, group.map(m => `${m.firstName} (parents: ${m.parentIds?.join(',') || 'none'})`));
+
+      // Créer des paires (couple ou individu seul)
+      const processed = new Set<string>();
+      const couples: (FamilyMember[])[] = [];
+      group.forEach(m => {
+        if (processed.has(m.id)) return;
+        processed.add(m.id);
+        const spouse = m.spouseId ? group.find(s => s.id === m.spouseId) : null;
+        if (spouse && !processed.has(spouse.id)) {
+          processed.add(spouse.id);
+          couples.push([m, spouse]);
+        } else {
+          couples.push([m]);
+        }
+      });
+
+      const coupleSpacing = 15;
+      const coupleWidths = couples.map(couple => {
+        return couple.length === 2
+          ? this.NODE_W + coupleSpacing + this.NODE_W
+          : this.NODE_W;
+      });
+
+      const totalW = coupleWidths.reduce((a, b) => a + b, 0) + (couples.length - 1) * this.H_GAP;
+      const startX = Math.max(0, (svgW - totalW) / 2);
+
+      // Grouper les enfants par père pour décaler verticalement
+      const childGroupsByFather = new Map<string, number>();
+      let fatherCount = 0;
+
+      couples.forEach(couple => {
+        const fatherId = couple[0].parentIds?.[0];
+        if (fatherId && !childGroupsByFather.has(fatherId)) {
+          childGroupsByFather.set(fatherId, fatherCount * 20);
+          fatherCount++;
+        }
+      });
+
+      let xOffset = startX;
+      couples.forEach((couple, idx) => {
+        const fatherId = couple[0].parentIds?.[0];
+        const yOffset = fatherId ? (childGroupsByFather.get(fatherId) ?? 0) : 0;
+        const baseY = gen * (this.NODE_H + this.GEN_GAP) + 40 + yOffset;
+
+        if (couple.length === 2) {
+          nodeMap.set(couple[0].id, {
+            member: couple[0],
+            x: xOffset,
+            y: baseY,
+            generation: gen,
+          });
+          nodeMap.set(couple[1].id, {
+            member: couple[1],
+            x: xOffset + this.NODE_W + coupleSpacing,
+            y: baseY,
+            generation: gen,
+          });
+          xOffset += coupleWidths[idx] + this.H_GAP;
+        } else {
+          nodeMap.set(couple[0].id, {
+            member: couple[0],
+            x: xOffset,
+            y: baseY,
+            generation: gen,
+          });
+          xOffset += coupleWidths[idx] + this.H_GAP;
+        }
       });
     });
 
     this.nodes = Array.from(nodeMap.values());
     this.buildConnections(nodeMap);
+  }
+
+  private getSubtreeWidth(memberId: string, visited = new Set<string>()): number {
+    if (visited.has(memberId)) return this.NODE_W;
+    visited.add(memberId);
+
+    const children = this.svc.getChildren(memberId);
+    if (children.length === 0) return this.NODE_W;
+
+    const childrenWidth = children.reduce((sum, child) =>
+      sum + this.getSubtreeWidth(child.id, new Set(visited)), 0
+    );
+    const spacing = (children.length - 1) * this.H_GAP;
+    return Math.max(this.NODE_W, childrenWidth + spacing);
   }
 
   private calculateWidth(groups: Map<number, FamilyMember[]>): number {
@@ -337,6 +497,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
             x1: fatherNode.x + this.NODE_W / 2, y1: fatherNode.y + this.NODE_H,
             x2: node.x + this.NODE_W / 2, y2: node.y,
             type: 'parent-child',
+            parentId: father?.id
           });
         }
       }
@@ -346,6 +507,16 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   getBentPath(c: Connection): string {
     const midY = c.y1 + (c.y2 - c.y1) / 2;
     return `M ${c.x1} ${c.y1} L ${c.x1} ${midY} L ${c.x2} ${midY} L ${c.x2} ${c.y2}`;
+  }
+
+  getColorForParent(parentId?: string): string {
+    if (!parentId) return 'rgba(100,116,139,0.75)';
+    const colors = [
+      '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+      '#06b6d4', '#6366f1', '#14b8a6', '#f97316'
+    ];
+    const hash = parentId.charCodeAt(0) + parentId.charCodeAt(parentId.length - 1);
+    return colors[hash % colors.length];
   }
   get zoomLabel(): string {
     return `${Math.round(this.zoomLevel * 100)}%`;
@@ -384,6 +555,31 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     return !!this.draggingNode && this.isDragging;
   }
 
+  private saveState(): void {
+    // Garder seulement les états jusqu'à l'index actuel (supprimer les "redo")
+    this.history = this.history.slice(0, this.historyIndex + 1);
+    // Ajouter le nouvel état
+    this.history.push(JSON.parse(JSON.stringify(this.allMembers)));
+    this.historyIndex++;
+    this.canUndo = this.historyIndex > 0;
+  }
+
+  undo(): void {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      const previousState = this.history[this.historyIndex];
+      this.allMembers = JSON.parse(JSON.stringify(previousState));
+      this.svc['membersSubject'].next(this.allMembers);
+      this.buildTree();
+      this.canUndo = this.historyIndex > 0;
+      this.cdr.markForCheck();
+    }
+  }
+
+  goBack(): void {
+    this.router.navigate(['../'], { relativeTo: this.route });
+  }
+
   onSearch(q: string): void { this.searchSubject.next(q); }
 
   selectMemberById(id: string): void {
@@ -401,9 +597,10 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
 
   onFormSave(member: FamilyMember): void {
     const isUpdate = !!this.editingMember;
-    const memberToSave = isUpdate ? member : { ...member, id: 'member_' + Date.now() };
-    
-    const operation = isUpdate 
+    const memberToSave = isUpdate ? member : { ...member, id: this.generateUUID() };
+
+    this.saveState();
+    const operation = isUpdate
       ? this.svc.updateMember(memberToSave)
       : this.svc.addMember(memberToSave);
 
@@ -424,18 +621,172 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   onFormCancel(): void { this.showForm = false; this.editingMember = null; }
 
   deleteMember(id: string): void {
-    this.svc.deleteMember(id).pipe(takeUntil(this.destroy$)).subscribe(
-      () => {
+    this.saveState();
+    this.svc.deleteMember(id).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
         if (this.selectedMember?.id === id) this.selectedMember = null;
         if (this.focusedFamilyIds.has(id)) this.resetFocus();
         this.cdr.markForCheck();
       },
-      error => {
+      error: (err: any) => {
         this.error = 'Erreur lors de la suppression du membre';
-        console.error('Error deleting member:', error);
+        console.error('Error deleting member:', err);
         setTimeout(() => { this.error = null; }, 3000);
       }
+    });
+  }
+
+  private reorderSiblings(draggedNode: TreeNode): void {
+    const member = draggedNode.member;
+    const siblings = this.allMembers.filter(m =>
+      m.id !== member.id &&
+      JSON.stringify(m.parentIds || []) === JSON.stringify(member.parentIds || [])
     );
+
+    if (siblings.length === 0) return;
+
+    const allInGroup = [member, ...siblings];
+
+    // Créer des paires (couple ou individu seul)
+    const processed = new Set<string>();
+    const pairs: FamilyMember[][] = [];
+
+    allInGroup.forEach(m => {
+      if (processed.has(m.id)) return;
+
+      processed.add(m.id);
+      const spouse = m.spouseId ? allInGroup.find(s => s.id === m.spouseId) : null;
+
+      if (spouse && !processed.has(spouse.id)) {
+        processed.add(spouse.id);
+        pairs.push([m, spouse]);
+      } else {
+        pairs.push([m]);
+      }
+    });
+
+    // Trier les paires par leur position X moyenne
+    const pairNodes = pairs.map(pair => {
+      const x0 = this.nodes.find(n => n.member.id === pair[0].id)?.x ?? 0;
+      const x1 = pair.length === 2 ? (this.nodes.find(n => n.member.id === pair[1].id)?.x ?? 0) : x0;
+      const avgX = pair.length === 2 ? (x0 + x1) / 2 : x0;
+      return { pair, avgX };
+    });
+
+    pairNodes.sort((a, b) => a.avgX - b.avgX);
+
+    this.saveState();
+
+    // Réassigner les displayOrder
+    let orderIdx = 0;
+    pairNodes.forEach(({ pair }) => {
+      pair.forEach(m => {
+        const updated = { ...m, displayOrder: orderIdx };
+        const idx = this.allMembers.findIndex(am => am.id === m.id);
+        if (idx >= 0) this.allMembers[idx] = updated;
+        orderIdx++;
+      });
+    });
+
+    this.svc['membersSubject'].next(this.allMembers);
+    this.buildTree();
+  }
+
+  private addParentsToMember(dossierId: string | null, memberId: string, maleParentId: string, femaleParentId: string): void {
+    if (!dossierId) {
+      console.error('Dossier ID not available');
+      return;
+    }
+
+    const member = this.svc.getById(memberId);
+    if (!member) return;
+
+    const maleParent = this.svc.getById(maleParentId);
+    const femaleParent = this.svc.getById(femaleParentId);
+
+    if (!maleParent || !femaleParent) {
+      console.error('Parents not found');
+      return;
+    }
+
+    const updatedMember: FamilyMember = {
+      ...member,
+      parentIds: [maleParentId, femaleParentId]
+    };
+
+    // Si le membre avait déjà un père, mettre à jour aussi les frères
+    const oldFatherId = member.parentIds?.[0];
+    const siblings = oldFatherId
+      ? this.allMembers.filter(m =>
+          m.id !== memberId &&
+          m.parentIds?.includes(oldFatherId) &&
+          !m.parentIds?.includes(femaleParentId)
+        )
+      : [];
+
+    // Trouver tous les enfants du père (existants et à mettre à jour)
+    const allChildrenOfFather = this.allMembers.filter(m =>
+      m.id !== memberId &&
+      m.parentIds?.includes(maleParentId)
+    );
+
+    // Assigner un displayOrder au nouvel enfant (à la fin)
+    const maxDisplayOrder = Math.max(
+      0,
+      ...allChildrenOfFather.map(m => m.displayOrder ?? 0)
+    );
+
+    const updatedMemberWithOrder: FamilyMember = {
+      ...updatedMember,
+      displayOrder: maxDisplayOrder + 1
+    };
+
+    // Mettre à jour aussi les enfants existants avec les deux parents
+    const childrenWithOrder: FamilyMember[] = allChildrenOfFather.map(child => ({
+      ...child,
+      parentIds: [maleParentId, femaleParentId]
+    } as FamilyMember)).concat([updatedMemberWithOrder]);
+
+    const updatedSiblings = siblings.map(s => ({
+      ...s,
+      parentIds: [maleParentId, femaleParentId]
+    }));
+
+    console.log(`🎯 Updating ${member.firstName} with parents:`, [maleParentId, femaleParentId]);
+    if (updatedSiblings.length > 0) {
+      console.log(`   + ${updatedSiblings.length} siblings also updated`);
+    }
+
+    this.saveState();
+    this.svc.updateMember(updatedMember).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        let current = this.allMembers.map(m => m.id === memberId ? updatedMember : m);
+
+        // Mettre à jour les enfants avec leur displayOrder séquentiel
+        childrenWithOrder.forEach(child => {
+          current = current.map(m => m.id === child.id ? child : m);
+          if (child.id !== memberId) {
+            this.svc.updateMember(child).pipe(takeUntil(this.destroy$)).subscribe();
+          }
+        });
+
+        // Mettre à jour aussi les frères
+        updatedSiblings.forEach(sibling => {
+          current = current.map(m => m.id === sibling.id ? sibling : m);
+          this.svc.updateMember(sibling).pipe(takeUntil(this.destroy$)).subscribe();
+        });
+
+        this.allMembers = current;
+        this.svc['membersSubject'].next(current);
+        this.buildTree();
+        this.focusOnFamily(maleParentId, femaleParentId);
+        this.cdr.markForCheck();
+      },
+      error: (err: any) => {
+        console.error('Erreur lors de l\'ajout des parents:', err);
+        alert('Erreur lors de l\'ajout des parents');
+      }
+    });
   }
 
   setFilterGen(gen: number | null): void {
@@ -452,4 +803,42 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   }
 
   trackById(_: number, node: TreeNode): string { return node.member.id; }
+
+  private generateUUID(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  private distanceToLine(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+
+    let param = -1;
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
+    } else {
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 }

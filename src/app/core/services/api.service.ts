@@ -120,7 +120,10 @@ export class ApiService {
   // ---- FAMILY TREE ----
   getFamilyTree(dossierId: string): Observable<any[]> {
     return this.http.get<ApiResponse<any[]>>(`${this.base}/dossiers/${dossierId}/family-tree`)
-      .pipe(map(r => r.data));
+      .pipe(
+        map(r => r.data),
+        map(data => data || [])
+      );
   }
 
   createFamilyMember(dossierId: string, member: any): Observable<any> {
@@ -129,15 +132,21 @@ export class ApiService {
     ).pipe(map(r => r.data));
   }
 
-  updateFamilyMember(memberId: string, member: any): Observable<any> {
+  updateFamilyMember(dossierId: string, memberId: string, member: any): Observable<any> {
     return this.http.put<ApiResponse<any>>(
-      `${this.base}/family-tree/members/${memberId}`, member
+      `${this.base}/dossiers/${dossierId}/family-tree/members/${memberId}`, member
     ).pipe(map(r => r.data));
   }
 
-  deleteFamilyMember(memberId: string): Observable<void> {
+  deleteFamilyMember(dossierId: string, memberId: string): Observable<void> {
     return this.http.delete<ApiResponse<void>>(
-      `${this.base}/family-tree/members/${memberId}`
+      `${this.base}/dossiers/${dossierId}/family-tree/members/${memberId}`
+    ).pipe(map(() => void 0));
+  }
+
+  linkCouple(dossierId: string, maleId: string, femaleId: string): Observable<void> {
+    return this.http.post<ApiResponse<void>>(
+      `${this.base}/dossiers/${dossierId}/family-tree/link-couple?maleId=${maleId}&femaleId=${femaleId}`, {}
     ).pipe(map(() => void 0));
   }
 }

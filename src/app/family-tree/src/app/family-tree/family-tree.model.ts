@@ -10,6 +10,7 @@ export interface FamilyMember {
   spouseId?: string;
   parentIds?: string[];
   photoInitials?: string;
+  displayOrder?: number;
 }
 
 export interface FamilyNode {

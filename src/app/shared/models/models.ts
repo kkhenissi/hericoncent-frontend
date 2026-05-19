@@ -145,3 +145,18 @@ export interface Document {
   uploadedAt: string;
   downloadUrl?: string;
 }
+
+// --- Family Tree ---
+export interface FamilyMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  birthYear: number;
+  deathYear?: number;
+  gender: 'male' | 'female';
+  profession?: string;
+  city?: string;
+  spouseId?: string;
+  parentIds?: string[];
+  photoInitials?: string;
+}

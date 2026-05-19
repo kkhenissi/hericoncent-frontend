@@ -230,7 +230,7 @@
   }
 
   &__name {
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 700;
     fill: #0f172a;
     dominant-baseline: central;
@@ -238,21 +238,21 @@
   }
 
   &__sub {
-    font-size: 10px;
+    font-size: 8px;
     fill: #475569;
     dominant-baseline: central;
     pointer-events: none;
   }
 
   &__city {
-    font-size: 10px;
+    font-size: 8px;
     fill: #64748b;
     dominant-baseline: central;
     pointer-events: none;
   }
 
   &__drag-hint {
-    font-size: 10px;
+    font-size: 8px;
     fill: #bbb;
     dominant-baseline: central;
     pointer-events: none;

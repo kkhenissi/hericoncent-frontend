@@ -14,25 +14,40 @@ export class FamilyTreeService {
 
   constructor(private apiService: ApiService) {}
 
+  getCurrentDossierId(): string | null {
+    return this.currentDossierId;
+  }
+
   setDossier(dossierId: string | null): void {
     this.currentDossierId = dossierId;
     this.useBackend = !!dossierId;
     if (dossierId) {
       this.loadFromBackend(dossierId);
+    } else {
+      this.membersSubject.next(FAMILY_DATA);
     }
   }
 
   private loadFromBackend(dossierId: string): void {
-    this.apiService.getFamilyTree(dossierId).subscribe(
-      (members: any) => {
-        this.membersSubject.next(members || []);
+    this.apiService.getFamilyTree(dossierId).subscribe({
+      next: (members: any) => {
+        if (members && members.length > 0) {
+          console.log(`Loaded ${members.length} family members from database for dossier ${dossierId}`);
+          this.membersSubject.next(members);
+        } else {
+          console.warn('No family members found in database. Using demo data.');
+          this.membersSubject.next(FAMILY_DATA);
+        }
       },
-      (error: any) => {
-        console.error('Error loading family tree from backend:', error);
-        // Fallback to empty if backend fails
-        this.membersSubject.next([]);
+      error: (error: any) => {
+        console.warn(`Failed to load family tree from backend (${error.status}). Using demo data.`);
+        if (error.status === 404 || error.status === 500) {
+          console.info('ℹ️ Make sure your backend implements the endpoint: GET /api/dossiers/{dossierId}/family-tree');
+        }
+        // Fallback to demo data if backend fails
+        this.membersSubject.next(FAMILY_DATA);
       }
-    );
+    });
   }
 
   getAll(): FamilyMember[] {
@@ -79,9 +94,9 @@ export class FamilyTreeService {
   }
 
   updateMember(updated: FamilyMember): Observable<FamilyMember> {
-    if (this.useBackend) {
+    if (this.useBackend && this.currentDossierId) {
       return new Observable(observer => {
-        this.apiService.updateFamilyMember(updated.id, updated).subscribe(
+        this.apiService.updateFamilyMember(this.currentDossierId!, updated.id, updated).subscribe(
           (updatedMember: any) => {
             const current = this.getAll().map(m => m.id === updated.id ? updatedMember : m);
             this.membersSubject.next(current);
@@ -106,20 +121,20 @@ export class FamilyTreeService {
   }
 
   deleteMember(id: string): Observable<void> {
-    if (this.useBackend) {
+    if (this.useBackend && this.currentDossierId) {
       return new Observable(observer => {
-        this.apiService.deleteFamilyMember(id).subscribe(
-          () => {
+        this.apiService.deleteFamilyMember(this.currentDossierId!, id).subscribe({
+          next: () => {
             const current = this.getAll().filter(m => m.id !== id);
             this.membersSubject.next(current);
             observer.next();
             observer.complete();
           },
-          (error: any) => {
+          error: (error: any) => {
             console.error('Error deleting member:', error);
             observer.error(error);
           }
-        );
+        });
       });
     } else {
       // Fallback to local state
