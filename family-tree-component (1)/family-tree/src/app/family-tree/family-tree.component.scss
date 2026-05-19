@@ -1,0 +1,107 @@
+.ft-root {
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+  padding: 1rem 0;
+}
+
+.ft-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.ft-search input {
+  padding: 7px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+  &:focus { border-color: #378ADD; }
+}
+
+.ft-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.ft-btn {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  &:hover { background: #f5f5f5; }
+  &.active { background: #E6F1FB; color: #185FA5; border-color: #85B7EB; }
+  &--primary { background: #185FA5; color: #fff; border-color: #185FA5; &:hover { background: #0C447C; } }
+}
+
+.ft-canvas-wrap {
+  overflow-x: auto;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.ft-svg { display: block; }
+
+.ft-line {
+  stroke-width: 1.5;
+  fill: none;
+  &--parent { stroke: #aaa; }
+  &--spouse { stroke: #D4537E; stroke-dasharray: 5 3; }
+}
+
+.ft-node {
+  cursor: pointer;
+  transition: opacity 0.2s;
+
+  &__rect {
+    fill: #fff;
+    stroke: #ddd;
+    stroke-width: 1;
+    transition: stroke 0.15s, fill 0.15s;
+  }
+
+  &__avatar { fill: #E6F1FB; }
+  &__initials { font-size: 10px; font-weight: 600; fill: #185FA5; dominant-baseline: central; }
+  &__name { font-size: 11px; font-weight: 600; fill: #1a1a1a; }
+  &__sub { font-size: 9px; fill: #888; }
+  &__city { font-size: 9px; fill: #aaa; }
+
+  &--male .ft-node__avatar { fill: #E1F5EE; }
+  &--male .ft-node__initials { fill: #0F6E56; }
+  &--male .ft-node__rect { stroke: #9FE1CB; }
+
+  &--female .ft-node__avatar { fill: #FBEAF0; }
+  &--female .ft-node__initials { fill: #993556; }
+  &--female .ft-node__rect { stroke: #F4C0D1; }
+
+  &--selected .ft-node__rect { stroke: #185FA5; stroke-width: 2; fill: #E6F1FB; }
+  &--highlighted .ft-node__rect { stroke: #EF9F27; stroke-width: 2; }
+  &--dimmed { opacity: 0.2; pointer-events: none; }
+
+  &:hover .ft-node__rect { fill: #f0f7ff; }
+}
+
+.ft-detail {
+  margin-top: 1rem;
+}
+
+.ft-form-overlay {
+  margin-top: 1rem;
+  background: rgba(0,0,0,0.05);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.ft-form-modal {
+  max-width: 520px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 1.5rem;
+}

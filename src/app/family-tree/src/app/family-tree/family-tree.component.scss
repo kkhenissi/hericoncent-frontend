@@ -1,0 +1,325 @@
+.ft-root {
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+  padding: 1rem 0;
+  user-select: none;
+}
+
+.ft-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 12px;
+  
+  p {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+  }
+}
+
+.ft-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #4338ca;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ft-error {
+  padding: 12px 16px;
+  background: #FEE2E2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: #991B1B;
+  }
+}
+
+.ft-toolbar {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 0.9rem;
+  padding: 0 10px;
+}
+
+.ft-toolbar > * {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ft-search input {
+  padding: 10px 14px;
+  border: 1px solid rgba(100,116,139,0.28);
+  border-radius: 999px;
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+  background: #f8fafc;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ft-search input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.14);
+}
+
+.ft-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ft-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ft-zoom-label {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  color: #444;
+}
+
+.ft-btn {
+  padding: 10px 16px;
+  border: 1px solid rgba(148,163,184,0.35);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  box-shadow: 0 5px 14px -10px rgba(15,23,42,0.25);
+}
+
+.ft-btn:hover {
+  background: #eef2ff;
+  transform: translateY(-1px);
+}
+
+.ft-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ft-btn.active {
+  background: #eef2ff;
+  color: #3730a3;
+  border-color: rgba(99,102,241,0.45);
+}
+
+.ft-btn--primary {
+  background: #4338ca;
+  color: #fff;
+  border-color: #4338ca;
+}
+
+.ft-btn--primary:hover {
+  background: #4f46e5;
+}
+
+.ft-btn--reset {
+  background: #e2e8f0;
+  color: #334155;
+  border-color: rgba(148,163,184,0.35);
+}
+
+.ft-hint {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 8px;
+  padding: 7px 12px;
+  background: #fafafa;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+}
+
+.ft-focus-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #eef2ff;
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 999px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  strong { font-weight: 700; }
+  button {
+    margin-left: auto;
+    background: #fff;
+    border: 1px solid rgba(100,116,139,0.24);
+    color: #3730a3;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 8px 14px;
+    text-decoration: none;
+    font-size: 12px;
+  }
+}
+
+.ft-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 12px;
+  color: #555;
+  &__item { display: flex; align-items: center; gap: 6px; svg { display: block; } }
+}
+
+.ft-canvas-wrap {
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+  max-height: 600px;
+  scroll-behavior: smooth;
+}
+
+.ft-svg {
+  display: block;
+  &--dragging { cursor: grabbing; }
+}
+
+.ft-line {
+  fill: none;
+  transition: opacity 0.3s;
+  stroke-linecap: round;
+  &--parent { stroke: rgba(100,116,139,0.75); stroke-width: 1.5; }
+  &--spouse { stroke: rgba(59,130,246,0.85); stroke-width: 1.8; stroke-dasharray: 6 4; }
+}
+
+.ft-node {
+  transition: opacity 0.3s;
+
+  &--male { cursor: default; }
+
+  &--female {
+    cursor: grab;
+    &:active { cursor: grabbing; }
+  }
+
+  &__shape {
+    fill: #f8fafc;
+    stroke: rgba(59,130,246,0.45);
+    stroke-width: 1.4;
+    transition: fill 0.15s, stroke 0.15s, stroke-width 0.15s, filter 0.15s;
+    filter: drop-shadow(0 3px 12px rgba(15,23,42,0.08));
+  }
+
+  &__name {
+    font-size: 12px;
+    font-weight: 700;
+    fill: #0f172a;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  &__sub {
+    font-size: 10px;
+    fill: #475569;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  &__city {
+    font-size: 10px;
+    fill: #64748b;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  &__drag-hint {
+    font-size: 10px;
+    fill: #bbb;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  &--selected .ft-node__shape {
+    fill: #E6F1FB;
+    stroke: #185FA5;
+    stroke-width: 2.5;
+  }
+  &--selected .ft-node__name { fill: #185FA5; }
+
+  &--dragging {
+    opacity: 0.25 !important;
+    .ft-node__shape { stroke-dasharray: 5 3; }
+  }
+
+  // Cible de drop valide — vert pulsant
+  &--drop-target .ft-node__shape {
+    fill: #E1F5EE;
+    stroke: #0F6E56;
+    stroke-width: 3;
+    animation: pulse-border 0.7s ease-in-out infinite alternate;
+  }
+
+  &:hover:not(.ft-node--male) .ft-node__shape { fill: #f0f7ff; }
+}
+
+@keyframes pulse-border {
+  from { stroke-width: 2.5; }
+  to   { stroke-width: 4; }
+}
+
+// Élément fantôme qui suit la souris
+.ft-ghost {
+  pointer-events: none;
+
+  &__shape {
+    fill: #E6F1FB;
+    stroke: #185FA5;
+    stroke-width: 2;
+    stroke-dasharray: 6 3;
+    opacity: 0.85;
+  }
+
+  &__text {
+    font-size: 11px;
+    font-weight: 600;
+    fill: #185FA5;
+    dominant-baseline: central;
+  }
+}
+
+.ft-detail { margin-top: 1rem; }
+
+.ft-form-overlay {
+  margin-top: 1rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.ft-form-modal {
+  max-width: 520px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 1.5rem;
+}

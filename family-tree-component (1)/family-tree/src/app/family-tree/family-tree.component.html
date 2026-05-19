@@ -1,0 +1,172 @@
+<div class="ft-root">
+
+  <div class="ft-toolbar">
+    <div class="ft-search">
+      <input
+        type="text"
+        placeholder="Rechercher un membre..."
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearch($event)"
+      />
+    </div>
+    <div class="ft-filters">
+      <button
+        *ngFor="let g of generations()"
+        class="ft-btn"
+        [class.active]="filterGen === g"
+        (click)="setFilterGen(g)"
+      >
+        Gen {{ g + 1 }}
+      </button>
+      <button class="ft-btn" [class.active]="filterGen === null" (click)="setFilterGen(null)">
+        Tous
+      </button>
+    </div>
+    <button class="ft-btn ft-btn--primary" (click)="openAddForm()">+ Ajouter</button>
+    <button class="ft-btn ft-btn--reset" *ngIf="isFamilyFocused" (click)="resetFocus()">
+      ← Voir tout l'arbre
+    </button>
+  </div>
+
+  <div class="ft-focus-banner" *ngIf="isFamilyFocused">
+    Famille de <strong>{{ focusedCoupleName }}</strong> mise en avant
+    <button (click)="resetFocus()">Afficher tout</button>
+  </div>
+
+  <div class="ft-hint" *ngIf="!isFamilyFocused">
+    Maintenez et glissez une <strong>femme (ovale)</strong> vers un <strong>homme (rectangle)</strong> pour zoomer sur leur famille
+  </div>
+
+  <div class="ft-legend">
+    <span class="ft-legend__item">
+      <svg width="34" height="22"><rect x="1" y="3" width="32" height="16" rx="2" fill="white" stroke="#1a1a1a" stroke-width="1.8"/></svg>
+      Homme
+    </span>
+    <span class="ft-legend__item">
+      <svg width="42" height="24"><ellipse cx="21" cy="12" rx="19" ry="10" fill="white" stroke="#1a1a1a" stroke-width="1.8"/></svg>
+      Femme (glissable)
+    </span>
+  </div>
+
+  <div class="ft-canvas-wrap" #svgWrapper>
+    <svg
+      #svgEl
+      [attr.width]="svgWidth"
+      [attr.height]="svgHeight"
+      class="ft-svg"
+      [class.ft-svg--dragging]="isDragging"
+    >
+
+      <!-- Connexions -->
+      <ng-container *ngFor="let c of connections">
+        <line
+          *ngIf="c.type === 'spouse'"
+          [attr.x1]="c.x1" [attr.y1]="c.y1"
+          [attr.x2]="c.x2" [attr.y2]="c.y2"
+          class="ft-line ft-line--spouse"
+          [style.opacity]="getConnectionOpacity(c)"
+        />
+        <path
+          *ngIf="c.type === 'parent-child'"
+          [attr.d]="getBentPath(c)"
+          class="ft-line ft-line--parent"
+          fill="none"
+          [style.opacity]="getConnectionOpacity(c)"
+        />
+      </ng-container>
+
+      <!-- Nœuds -->
+      <ng-container *ngFor="let node of nodes; trackBy: trackById">
+
+        <!-- HOMME → Rectangle -->
+        <g
+          *ngIf="node.member.gender === 'male'"
+          class="ft-node ft-node--male"
+          [class.ft-node--selected]="selectedMember?.id === node.member.id"
+          [class.ft-node--drop-target]="dropTargetId === node.member.id"
+          [style.opacity]="getNodeOpacity(node.member.id)"
+          [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+          (mousedown)="selectMember(node)"
+        >
+          <rect [attr.width]="NODE_W" [attr.height]="NODE_H" rx="3" class="ft-node__shape"/>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 - 10" text-anchor="middle" class="ft-node__name">
+            {{ node.member.firstName }} {{ node.member.lastName }}
+          </text>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 8" text-anchor="middle" class="ft-node__sub">
+            {{ getLifespan(node.member) }}
+          </text>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 22" text-anchor="middle" class="ft-node__city">
+            {{ node.member.city }}
+          </text>
+        </g>
+
+        <!-- FEMME → Ellipse (draggable via mousedown) -->
+        <g
+          *ngIf="node.member.gender === 'female'"
+          class="ft-node ft-node--female"
+          [class.ft-node--selected]="selectedMember?.id === node.member.id"
+          [class.ft-node--dragging]="draggingNode?.member?.id === node.member.id && isDragging"
+          [style.opacity]="getNodeOpacity(node.member.id)"
+          [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+          (mousedown)="onMouseDown($event, node)"
+        >
+          <ellipse
+            [attr.cx]="NODE_W/2" [attr.cy]="NODE_H/2"
+            [attr.rx]="NODE_W/2 - 2" [attr.ry]="NODE_H/2 - 2"
+            class="ft-node__shape"
+          />
+          <!-- Indicateur drag -->
+          <text [attr.x]="NODE_W - 14" [attr.y]="16" class="ft-node__drag-hint" text-anchor="middle">✥</text>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 - 10" text-anchor="middle" class="ft-node__name">
+            {{ node.member.firstName }} {{ node.member.lastName }}
+          </text>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 8" text-anchor="middle" class="ft-node__sub">
+            {{ getLifespan(node.member) }}
+          </text>
+          <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 22" text-anchor="middle" class="ft-node__city">
+            {{ node.member.city }}
+          </text>
+        </g>
+
+      </ng-container>
+
+      <!-- Ghost (élément fantôme qui suit la souris pendant le drag) -->
+      <g
+        *ngIf="ghostVisible"
+        class="ft-ghost"
+        [attr.transform]="'translate(' + (ghostX - NODE_W/2) + ',' + (ghostY - NODE_H/2) + ')'"
+      >
+        <ellipse
+          [attr.cx]="NODE_W/2" [attr.cy]="NODE_H/2"
+          [attr.rx]="NODE_W/2 - 2" [attr.ry]="NODE_H/2 - 2"
+          class="ft-ghost__shape"
+        />
+        <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2" text-anchor="middle" class="ft-ghost__text">
+          {{ draggingNode?.member?.firstName }}
+        </text>
+      </g>
+
+    </svg>
+  </div>
+
+  <div class="ft-detail" *ngIf="selectedMember && !isDragging">
+    <app-member-card
+      [member]="selectedMember"
+      (onEdit)="openEditForm($event)"
+      (onDelete)="deleteMember($event)"
+      (onClose)="selectedMember = null"
+    />
+  </div>
+
+  <div class="ft-form-overlay" *ngIf="showForm">
+    <div class="ft-form-modal">
+      <app-member-form
+        [member]="editingMember"
+        [allMembers]="allMembers"
+        (onSave)="onFormSave($event)"
+        (onCancel)="onFormCancel()"
+      />
+    </div>
+  </div>
+
+</div>
