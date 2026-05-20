@@ -75,6 +75,7 @@ export interface Heritier {
   role: string;
   statutContact: StatutContact;
   identityVerified: boolean;
+  validated?: boolean;
   reponseConsentement?: string;
 }
 
@@ -89,6 +90,7 @@ export interface AddHeritierRequest {
   adresse?: string;
   part: number;
   role?: string;
+  validated?: boolean;
 }
 
 // --- Consentement ---

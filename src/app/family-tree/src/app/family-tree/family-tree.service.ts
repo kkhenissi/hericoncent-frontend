@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { AddHeritierRequest } from '../../../../shared/models/models';
 import { FamilyMember } from './family-tree.model';
 import { FAMILY_DATA } from './family-tree.data';
 import { ApiService } from '../../../../core/services/api.service';
@@ -31,23 +32,63 @@ export class FamilyTreeService {
   private loadFromBackend(dossierId: string): void {
     this.apiService.getFamilyTree(dossierId).subscribe({
       next: (members: any) => {
-        if (members && members.length > 0) {
-          console.log(`Loaded ${members.length} family members from database for dossier ${dossierId}`);
-          this.membersSubject.next(members);
+        const parsed = this.parseMembers(members);
+        if (parsed && parsed.length > 0) {
+          console.log(`Loaded ${parsed.length} family members from database for dossier ${dossierId}`);
+          this.membersSubject.next(parsed);
+          return;
+        }
+
+        console.warn('No family members returned from family-tree endpoint, trying dossier detail fallback.');
+        this.loadFromDossierDetailFallback(dossierId);
+      },
+      error: (error: any) => {
+        console.warn(`Failed to load family tree from backend (${error?.status}). Trying dossier detail fallback.`);
+        this.loadFromDossierDetailFallback(dossierId);
+      }
+    });
+  }
+
+  private loadFromDossierDetailFallback(dossierId: string): void {
+    this.apiService.getDossier(dossierId).subscribe({
+      next: (detail: any) => {
+        const parsed = this.parseMembers(detail?.relations_familiales ?? detail?.familyMembers ?? detail?.relationsFamiliales ?? detail?.arbre ?? []);
+        if (parsed && parsed.length > 0) {
+          console.log(`Loaded ${parsed.length} family members from dossier detail fallback for dossier ${dossierId}`);
+          this.membersSubject.next(parsed);
         } else {
-          console.warn('No family members found in database. Using demo data.');
+          console.warn('Fallback dossier detail did not contain family members. Using demo data.');
           this.membersSubject.next(FAMILY_DATA);
         }
       },
       error: (error: any) => {
-        console.warn(`Failed to load family tree from backend (${error.status}). Using demo data.`);
-        if (error.status === 404 || error.status === 500) {
-          console.info('ℹ️ Make sure your backend implements the endpoint: GET /api/dossiers/{dossierId}/family-tree');
-        }
-        // Fallback to demo data if backend fails
+        console.error(`Failed to load dossier detail fallback (${error?.status}). Using demo data.`);
         this.membersSubject.next(FAMILY_DATA);
       }
     });
+  }
+
+  private parseMembers(payload: any): FamilyMember[] {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (typeof payload === 'object' && payload.data && Array.isArray(payload.data)) {
+      return payload.data;
+    }
+    return [];
+  }
+
+  private toAddHeritierRequest(member: FamilyMember): AddHeritierRequest {
+    return {
+      nom: member.lastName || '',
+      prenom: member.firstName || '',
+      email: undefined,
+      telephone: undefined,
+      dateNaissance: member.birthYear ? `${member.birthYear}-01-01` : undefined,
+      adresse: member.city,
+      part: 0,
+      role: member.profession ?? 'Héritier arbre',
+      validated: member.validated ?? false,
+    };
   }
 
   getAll(): FamilyMember[] {
@@ -69,15 +110,22 @@ export class FamilyTreeService {
   addMember(member: FamilyMember): Observable<FamilyMember> {
     if (this.useBackend && this.currentDossierId) {
       return new Observable(observer => {
-        this.apiService.createFamilyMember(this.currentDossierId!, member).subscribe(
-          (newMember: any) => {
+        const request = this.toAddHeritierRequest(member);
+        this.apiService.addHeritier(this.currentDossierId!, request).subscribe(
+          (newHeritier: any) => {
+            const persistedMember: FamilyMember = {
+              ...member,
+              id: newHeritier.id || member.id,
+              personneId: newHeritier.personneId || newHeritier.id,  // Store backend personne ID
+              validated: newHeritier.validated ?? member.validated ?? false,
+            };
             const current = this.getAll();
-            this.membersSubject.next([...current, newMember]);
-            observer.next(newMember);
+            this.membersSubject.next([...current, persistedMember]);
+            observer.next(persistedMember);
             observer.complete();
           },
           (error: any) => {
-            console.error('Error adding member:', error);
+            console.error('Error adding member via heritier API:', error);
             observer.error(error);
           }
         );

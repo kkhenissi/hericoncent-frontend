@@ -11,6 +11,11 @@
     <p>⚠️ {{ error }}</p>
   </div>
 
+  <!-- Saved state -->
+  <div class="ft-saved" *ngIf="savedMessage">
+    <p>{{ savedMessage }}</p>
+  </div>
+
   <div class="ft-toolbar">
     <button class="ft-btn ft-btn--secondary" (click)="undo()" [disabled]="!canUndo" title="Annuler la dernière action">↶ Annuler</button>
     <div class="ft-search">
@@ -40,10 +45,15 @@
       <button class="ft-btn" type="button" (click)="zoomIn()" [disabled]="zoomLevel >= maxZoom">+</button>
       <button class="ft-btn ft-btn--reset" type="button" (click)="resetZoom()">Reset</button>
     </div>
-    <button class="ft-btn ft-btn--primary" (click)="openAddForm()">+ Ajouter</button>
+    <button class="ft-btn ft-btn--primary" (click)="openAddForm()" [disabled]="!currentDossierId" title="Les modifications sont persistées seulement depuis un dossier">
+      + Ajouter
+    </button>
     <button class="ft-btn ft-btn--reset" *ngIf="isFamilyFocused" (click)="resetFocus()">
       ← Voir tout l'arbre
     </button>
+  </div>
+  <div class="ft-warning" *ngIf="!currentDossierId">
+    Note : vous êtes dans la vue globale de l'arbre. Les modifications ne sont pas sauvegardées ici. Ouvrez un dossier pour persister les membres.
   </div>
 
   <div class="ft-focus-banner" *ngIf="isFamilyFocused">

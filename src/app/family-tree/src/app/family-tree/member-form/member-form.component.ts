@@ -54,6 +54,14 @@ import { FamilyMember } from '../family-tree.model';
       </div>
 
       <div class="form__field">
+        <label>Validé</label>
+        <label class="form__checkbox">
+          <input type="checkbox" [(ngModel)]="draft.validated" />
+          <span>Oui</span>
+        </label>
+      </div>
+
+      <div class="form__field">
         <label>Parents (IDs séparés par virgule)</label>
         <input [ngModel]="draft.parentIds?.join(',')" (ngModelChange)="setParents($event)"
                placeholder="henri,marguerite" />
@@ -103,7 +111,7 @@ export class MemberFormComponent implements OnInit {
   ngOnInit(): void {
     this.draft = this.member ? { ...this.member } : {
       firstName: '', lastName: '', birthYear: new Date().getFullYear(),
-      gender: 'male', parentIds: [],
+      gender: 'male', parentIds: [], validated: false,
     };
   }
 

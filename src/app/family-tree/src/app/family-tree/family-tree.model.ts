@@ -1,5 +1,6 @@
 export interface FamilyMember {
   id: string;
+  personneId?: string;  // Backend personne ID for family tree operations
   firstName: string;
   lastName: string;
   birthYear: number;
@@ -11,6 +12,7 @@ export interface FamilyMember {
   parentIds?: string[];
   photoInitials?: string;
   displayOrder?: number;
+  validated?: boolean;
 }
 
 export interface FamilyNode {

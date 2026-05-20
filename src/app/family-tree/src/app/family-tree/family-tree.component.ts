@@ -81,6 +81,13 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   loading = false;
   error: string | null = null;
   canUndo = false;
+  savedMessage = '';
+  private savedTimeout: any;
+  currentDossierId: string | null = null;
+
+  get isPersistentView(): boolean {
+    return !!this.currentDossierId;
+  }
 
   constructor(
     public svc: FamilyTreeService,
@@ -94,6 +101,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     // Get dossierId from route params if available
     this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const dossierId = params.get('dossierId');
+      this.currentDossierId = dossierId;
       this.loading = true;
       this.error = null;
       this.svc.setDossier(dossierId);
@@ -245,7 +253,9 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
         }
         // Lier comme couple via API
         this.saveState();
-        this.apiService.linkCouple(dossierId, male.id, female.id)
+        const malePersonneId = male.personneId || male.id;
+        const femalePersonneId = female.personneId || female.id;
+        this.apiService.linkCouple(dossierId, malePersonneId, femalePersonneId)
           .pipe(takeUntil(this.destroy$))
           .subscribe({
             next: () => {
@@ -261,6 +271,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
 
               // Focus sur la famille
               this.focusOnFamily(male.id, female.id);
+              this.showSaved();
               this.cdr.markForCheck();
             },
             error: (err: any) => {
@@ -555,6 +566,16 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     return !!this.draggingNode && this.isDragging;
   }
 
+  private showSaved(): void {
+    this.savedMessage = '✓ Sauvegardé au dossier';
+    if (this.savedTimeout) clearTimeout(this.savedTimeout);
+    this.savedTimeout = setTimeout(() => {
+      this.savedMessage = '';
+      this.cdr.markForCheck();
+    }, 2000);
+    this.cdr.markForCheck();
+  }
+
   private saveState(): void {
     // Garder seulement les états jusqu'à l'index actuel (supprimer les "redo")
     this.history = this.history.slice(0, this.historyIndex + 1);
@@ -597,7 +618,9 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
 
   onFormSave(member: FamilyMember): void {
     const isUpdate = !!this.editingMember;
-    const memberToSave = isUpdate ? member : { ...member, id: this.generateUUID() };
+    const memberToSave = isUpdate
+      ? member
+      : { ...member, id: this.generateUUID(), validated: member.validated ?? false };
 
     this.saveState();
     const operation = isUpdate
@@ -608,6 +631,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
       () => {
         this.showForm = false;
         this.editingMember = null;
+        this.showSaved();
         this.cdr.markForCheck();
       },
       error => {
@@ -626,6 +650,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
       next: () => {
         if (this.selectedMember?.id === id) this.selectedMember = null;
         if (this.focusedFamilyIds.has(id)) this.resetFocus();
+        this.showSaved();
         this.cdr.markForCheck();
       },
       error: (err: any) => {
@@ -780,6 +805,7 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
         this.svc['membersSubject'].next(current);
         this.buildTree();
         this.focusOnFamily(maleParentId, femaleParentId);
+        this.showSaved();
         this.cdr.markForCheck();
       },
       error: (err: any) => {

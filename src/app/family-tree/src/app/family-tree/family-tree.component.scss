@@ -40,11 +40,25 @@
   border: 1px solid #FECACA;
   border-radius: 8px;
   margin-bottom: 12px;
-  
+
   p {
     margin: 0;
     font-size: 13px;
     color: #991B1B;
+  }
+}
+
+.ft-saved {
+  padding: 12px 16px;
+  background: #DCFCE7;
+  border: 1px solid #BBF7D0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: #166534;
   }
 }
 
@@ -106,6 +120,16 @@
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, transform 0.15s;
   box-shadow: 0 5px 14px -10px rgba(15,23,42,0.25);
+}
+
+.ft-warning {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #fef9c3;
+  border: 1px solid #facc15;
+  color: #92400e;
+  font-size: 12px;
+  margin-bottom: 0.9rem;
 }
 
 .ft-btn:hover {
