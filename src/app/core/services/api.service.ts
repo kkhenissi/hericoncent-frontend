@@ -102,6 +102,12 @@ export class ApiService {
       .pipe(map(r => r.data));
   }
 
+  getConsentementByToken(token: string): Observable<Consentement> {
+    return this.http.get<ApiResponse<Consentement>>(
+      `${this.base}/consentements/repondre/token/${token}`
+    ).pipe(map(r => r.data));
+  }
+
   repondreParToken(token: string, req: RepondreRequest): Observable<Consentement> {
     return this.http.post<ApiResponse<Consentement>>(
       `${this.base}/consentements/repondre/token/${token}`, req

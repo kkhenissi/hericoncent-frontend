@@ -112,6 +112,8 @@ export interface Consentement {
   progressPercent: number;
   createdAt: string;
   reponses?: ReponseDetail[];
+  dejaRepondu?: boolean;
+  reponseActuelle?: string;
 }
 
 export type ConsentementStatut = 'EN_ATTENTE' | 'PARTIEL' | 'VALIDE' | 'REJETE' | 'EXPIRE';

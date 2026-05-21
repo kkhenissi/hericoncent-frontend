@@ -22,11 +22,25 @@ import { Consentement } from '../../shared/models/models';
           <div class="loading"><div class="spinner"></div> Chargement...</div>
         }
 
-        @if (!loading() && !token) {
+        @if (!loading() && (!token || loadError())) {
           <div class="error-state">
             <div class="error-icon">⚠</div>
             <h2>Lien invalide</h2>
-            <p>Ce lien de consentement est invalide ou a expiré.</p>
+            <p>{{ loadError() || 'Ce lien de consentement est invalide ou a expiré.' }}</p>
+          </div>
+        }
+
+        @if (!loading() && alreadyAnswered()) {
+          <div class="already-state">
+            <div class="already-icon">{{ reponseActuelle() === 'ACCEPTE' ? '✓' : '✗' }}</div>
+            <h2>Réponse déjà enregistrée</h2>
+            <p>
+              Vous avez déjà répondu à cette demande :
+              <strong>{{ reponseActuelle() === 'ACCEPTE' ? 'Accepté' : reponseActuelle() === 'REJETE' ? 'Refusé' : 'Délégué' }}</strong>.
+            </p>
+            @if (consentement()) {
+              <p class="already-dossier">Dossier : <em>{{ consentement()!.titre }}</em></p>
+            }
           </div>
         }
 
@@ -38,7 +52,7 @@ import { Consentement } from '../../shared/models/models';
           </div>
         }
 
-        @if (!loading() && !done() && token) {
+        @if (!loading() && !done() && !alreadyAnswered() && token && !loadError()) {
           <div class="content">
             <h2>Demande de consentement</h2>
             <p class="subtitle">Vous avez reçu une demande de consentement successoral. Veuillez lire attentivement avant de répondre.</p>
@@ -57,8 +71,14 @@ import { Consentement } from '../../shared/models/models';
                 }
                 <div class="info-row">
                   <span class="info-label">Type</span>
-                  <span class="info-value">{{ consentement()!.typeAction }}</span>
+                  <span class="info-value">{{ typeLabel(consentement()!.typeAction) }}</span>
                 </div>
+                @if (consentement()!.expireLe) {
+                  <div class="info-row">
+                    <span class="info-label">Expire le</span>
+                    <span class="info-value expire">{{ consentement()!.expireLe | date:'dd/MM/yyyy HH:mm' }}</span>
+                  </div>
+                }
                 <div class="info-row">
                   <span class="info-label">Progression</span>
                   <div class="mini-progress">
@@ -85,13 +105,13 @@ import { Consentement } from '../../shared/models/models';
               }
 
               <div class="action-btns">
-                <button type="button" class="btn-rejeter"
+                <button type="button" class="btn-rejeter" [disabled]="submitting()"
                         (click)="form.patchValue({reponse: 'REJETE'}); submit()">
                   ✗ Je refuse
                 </button>
-                <button type="button" class="btn-accepter"
+                <button type="button" class="btn-accepter" [disabled]="submitting()"
                         (click)="form.patchValue({reponse: 'ACCEPTE'}); submit()">
-                  ✓ J'accepte
+                  {{ submitting() ? '...' : '✓ J\'accepte' }}
                 </button>
               </div>
             </form>
@@ -224,6 +244,24 @@ import { Consentement } from '../../shared/models/models';
     }
 
     .error-state p, .success-state p { color: #777; font-size: 14px; }
+
+    .already-state {
+      text-align: center; padding: 32px 20px;
+    }
+
+    .already-icon {
+      width: 60px; height: 60px;
+      background: linear-gradient(135deg, #c9a96e, #e8c98a);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 26px; color: #fff; margin: 0 auto 16px;
+    }
+
+    .already-state p { color: #777; font-size: 14px; margin: 6px 0; }
+    .already-dossier { font-style: italic; }
+
+    .expire { color: #dd6b20; font-weight: 600; }
+
+    .btn-accepter:disabled, .btn-rejeter:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
   `]
 })
 export class RepondreTokenComponent implements OnInit {
@@ -231,7 +269,11 @@ export class RepondreTokenComponent implements OnInit {
   consentement = signal<Consentement | null>(null);
   loading = signal(true);
   done = signal(false);
+  submitting = signal(false);
   error = signal('');
+  loadError = signal('');
+  alreadyAnswered = signal(false);
+  reponseActuelle = signal<string | null>(null);
 
   form = this.fb.group({
     reponse: ['', Validators.required],
@@ -246,27 +288,46 @@ export class RepondreTokenComponent implements OnInit {
 
   ngOnInit(): void {
     this.token = this.route.snapshot.queryParamMap.get('token');
-    if (this.token) {
-      // Charger info du consentement via token serait idéal;
-      // pour l'instant on montre le formulaire directement
+    if (!this.token) {
       this.loading.set(false);
-    } else {
-      this.loading.set(false);
+      return;
     }
+
+    this.api.getConsentementByToken(this.token).subscribe({
+      next: (c) => {
+        this.consentement.set(c);
+        if (c.dejaRepondu) {
+          this.alreadyAnswered.set(true);
+          this.reponseActuelle.set(c.reponseActuelle ?? null);
+        }
+        this.loading.set(false);
+      },
+      error: (e) => {
+        this.loadError.set(e.error?.message ?? 'Ce lien de consentement est invalide ou a expiré.');
+        this.loading.set(false);
+      }
+    });
   }
 
   submit(): void {
-    if (!this.token || !this.form.value.reponse) return;
+    if (!this.token || !this.form.value.reponse || this.submitting()) return;
     this.error.set('');
+    this.submitting.set(true);
 
     this.api.repondreParToken(this.token, this.form.value as any).subscribe({
-      next: (c) => {
-        this.consentement.set(c);
+      next: () => {
+        this.submitting.set(false);
         this.done.set(true);
       },
       error: (e) => {
+        this.submitting.set(false);
         this.error.set(e.error?.message ?? 'Une erreur est survenue. Le lien est peut-être expiré.');
       }
     });
+  }
+
+  typeLabel(t: string): string {
+    const m: Record<string, string> = { VENTE: 'Vente', PARTAGE: 'Partage', DONATION: 'Donation', MANDAT: 'Mandat', AUTRE: 'Autre' };
+    return m[t] ?? t;
   }
 }

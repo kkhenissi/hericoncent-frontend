@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
@@ -38,13 +38,13 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
 
         <!-- TABS -->
         <div class="tabs">
-          <button (click)="activeTab.set('heritiers')" [class.active]="activeTab() === 'heritiers'" class="tab">
+          <button (click)="switchTab('heritiers')" [class.active]="activeTab() === 'heritiers'" class="tab">
             Héritiers ({{ heritiersActifs().length }})
           </button>
-          <button (click)="activeTab.set('consentements')" [class.active]="activeTab() === 'consentements'" class="tab">
+          <button (click)="switchTab('consentements')" [class.active]="activeTab() === 'consentements'" class="tab">
             Consentements ({{ dossier()!.consentements.length }})
           </button>
-          <button (click)="activeTab.set('documents')" [class.active]="activeTab() === 'documents'" class="tab">
+          <button (click)="switchTab('documents')" [class.active]="activeTab() === 'documents'" class="tab">
             Documents ({{ dossier()!.documents.length }})
           </button>
         </div>
@@ -129,6 +129,10 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
         <!-- TAB: CONSENTEMENTS -->
         @if (activeTab() === 'consentements') {
           <div class="tab-content">
+            <div class="refresh-bar">
+              <span class="refresh-hint">Mise à jour automatique toutes les 10s</span>
+              <button class="btn-refresh" (click)="silentRefresh()" title="Actualiser maintenant">↻ Actualiser</button>
+            </div>
             @if (auth.isNotaire()) {
               <div class="form-card">
                 <h3>Créer une demande de consentement</h3>
@@ -199,7 +203,16 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
                   }
 
                   @if (auth.isNotaire()) {
-                    <button class="btn-relancer" (click)="relancer(c.id)">📨 Relancer</button>
+                    <div class="relancer-row">
+                      <button class="btn-relancer"
+                              [disabled]="relancerLoadingId() === c.id"
+                              (click)="relancer(c.id)">
+                        {{ relancerLoadingId() === c.id ? '...' : '📨 Relancer' }}
+                      </button>
+                      @if (relancerSuccessId() === c.id) {
+                        <span class="relancer-ok">✓ Relances envoyées</span>
+                      }
+                    </div>
                   }
                 </div>
               }
@@ -506,20 +519,55 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty { text-align: center; padding: 32px; color: #bbb; font-size: 14px; }
+
+    /* REFRESH BAR */
+    .refresh-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; padding: 8px 14px;
+      background: rgba(201,169,110,0.06); border-radius: 10px;
+      border: 1px solid rgba(201,169,110,0.15);
+    }
+
+    .refresh-hint { font-size: 12px; color: #aaa; }
+
+    .btn-refresh {
+      padding: 5px 14px; background: none;
+      border: 1px solid #c9a96e; border-radius: 8px;
+      font-size: 12px; font-weight: 600; color: #c9a96e;
+      cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+    }
+
+    .btn-refresh:hover { background: rgba(201,169,110,0.1); }
+
+    /* RELANCER */
+    .relancer-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+
+    .btn-relancer:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .relancer-ok {
+      font-size: 12px; font-weight: 600; color: #38a169;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   `]
 })
-export class DossierDetailComponent implements OnInit {
+export class DossierDetailComponent implements OnInit, OnDestroy {
   dossier = signal<DossierDetail | null>(null);
   loading = signal(true);
   activeTab = signal<'heritiers' | 'consentements' | 'documents'>('heritiers');
   addingHeritier = signal(false);
   addingConsent = signal(false);
+  relancerLoadingId = signal<string | null>(null);
+  relancerSuccessId = signal<string | null>(null);
 
   heritiersActifs = computed(() => (this.dossier()?.heritiers ?? []).filter(h => h.isHeir));
   editingHeritierId = signal<string | null>(null);
   savingHeritierId = signal<string | null>(null);
   editEmail = '';
   editPart: number | null = null;
+
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
 
   heritierForm = this.fb.group({
     prenom: ['', Validators.required],
@@ -546,6 +594,38 @@ export class DossierDetailComponent implements OnInit {
   ngOnInit(): void {
     this.dossierId = this.route.snapshot.paramMap.get('id')!;
     this.loadDossier();
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+  }
+
+  switchTab(tab: 'heritiers' | 'consentements' | 'documents'): void {
+    this.activeTab.set(tab);
+    if (tab === 'consentements') {
+      this.startPolling();
+    } else {
+      this.stopPolling();
+    }
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    this.pollInterval = setInterval(() => this.silentRefresh(), 10_000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval !== null) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  silentRefresh(): void {
+    this.api.getDossier(this.dossierId).subscribe({
+      next: d => this.dossier.set(d),
+      error: () => {}
+    });
   }
 
   loadDossier(): void {
@@ -601,7 +681,17 @@ export class DossierDetailComponent implements OnInit {
   }
 
   relancer(id: string): void {
-    this.api.relancerConsentement(id).subscribe({ next: () => alert('Relances envoyées !') });
+    this.relancerLoadingId.set(id);
+    this.relancerSuccessId.set(null);
+    this.api.relancerConsentement(id).subscribe({
+      next: () => {
+        this.relancerLoadingId.set(null);
+        this.relancerSuccessId.set(id);
+        this.silentRefresh();
+        setTimeout(() => this.relancerSuccessId.set(null), 4000);
+      },
+      error: () => this.relancerLoadingId.set(null)
+    });
   }
 
   statutLabel(s: string): string {
