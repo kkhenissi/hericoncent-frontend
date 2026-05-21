@@ -115,6 +115,7 @@
           [class.ft-node--selected]="selectedMember?.id === node.member.id"
           [class.ft-node--drop-target]="dropTargetId === node.member.id"
           [class.ft-node--dragging]="draggingNode?.member?.id === node.member.id && isDragging"
+          [class.ft-node--deceased]="node.member.deathYear !== undefined && node.member.deathYear !== null"
           [style.opacity]="getNodeOpacity(node.member.id)"
           [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
           (mousedown)="onMouseDown($event, node)"
@@ -129,6 +130,18 @@
           <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 22" text-anchor="middle" class="ft-node__city">
             {{ node.member.city }}
           </text>
+          <g
+            class="ft-node__heir"
+            [class.ft-node__heir--checked]="!!node.member.isHeir && !node.member.deathYear"
+            [class.ft-node__heir--disabled]="!!node.member.deathYear"
+            [attr.transform]="'translate(8,' + (NODE_H/2 - 3) + ')'"
+            (mousedown)="$event.stopPropagation()"
+            (click)="toggleHeir($event, node.member)"
+          >
+            <title>{{ node.member.deathYear ? 'Décédé(e) — non héritier' : 'Héritier' }}</title>
+            <rect width="14" height="14" rx="3" class="ft-node__heir-box"/>
+            <path *ngIf="node.member.isHeir && !node.member.deathYear" d="M3 7 L6 10 L11 4" class="ft-node__heir-check" fill="none"/>
+          </g>
         </g>
 
         <!-- FEMME → Ellipse (draggable via mousedown) -->
@@ -137,6 +150,7 @@
           class="ft-node ft-node--female"
           [class.ft-node--selected]="selectedMember?.id === node.member.id"
           [class.ft-node--dragging]="draggingNode?.member?.id === node.member.id && isDragging"
+          [class.ft-node--deceased]="node.member.deathYear !== undefined && node.member.deathYear !== null"
           [style.opacity]="getNodeOpacity(node.member.id)"
           [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
           (mousedown)="onMouseDown($event, node)"
@@ -157,6 +171,18 @@
           <text [attr.x]="NODE_W/2" [attr.y]="NODE_H/2 + 22" text-anchor="middle" class="ft-node__city">
             {{ node.member.city }}
           </text>
+          <g
+            class="ft-node__heir"
+            [class.ft-node__heir--checked]="!!node.member.isHeir && !node.member.deathYear"
+            [class.ft-node__heir--disabled]="!!node.member.deathYear"
+            [attr.transform]="'translate(10,' + (NODE_H/2 - 3) + ')'"
+            (mousedown)="$event.stopPropagation()"
+            (click)="toggleHeir($event, node.member)"
+          >
+            <title>{{ node.member.deathYear ? 'Décédé(e) — non héritier' : 'Héritier' }}</title>
+            <rect width="14" height="14" rx="3" class="ft-node__heir-box"/>
+            <path *ngIf="node.member.isHeir && !node.member.deathYear" d="M3 7 L6 10 L11 4" class="ft-node__heir-check" fill="none"/>
+          </g>
         </g>
 
       </ng-container>
@@ -198,7 +224,7 @@
     />
   </div>
 
-  <div class="ft-form-overlay" *ngIf="showForm">
+  <div class="ft-form-overlay" *ngIf="showForm" #formAnchor>
     <div class="ft-form-modal">
       <app-member-form
         [member]="editingMember"

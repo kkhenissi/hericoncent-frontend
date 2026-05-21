@@ -25,9 +25,15 @@ import { FamilyMember } from '../family-tree.model';
 
       <div class="form__row">
         <div class="form__field">
+          <label>Email</label>
+          <input type="email" [(ngModel)]="draft.email" placeholder="exemple@domaine.com" />
+        </div>
+        <div class="form__field">
           <label>Année de naissance *</label>
           <input type="number" [(ngModel)]="draft.birthYear" placeholder="1980" />
         </div>
+      </div>
+      <div class="form__row">
         <div class="form__field">
           <label>Année de décès</label>
           <input type="number" [(ngModel)]="draft.deathYear" placeholder="(si décédé)" />
@@ -110,7 +116,7 @@ export class MemberFormComponent implements OnInit {
 
   ngOnInit(): void {
     this.draft = this.member ? { ...this.member } : {
-      firstName: '', lastName: '', birthYear: new Date().getFullYear(),
+      firstName: '', lastName: '', email: '', birthYear: new Date().getFullYear(),
       gender: 'male', parentIds: [], validated: false,
     };
   }

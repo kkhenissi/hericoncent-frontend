@@ -87,7 +87,9 @@ export class FamilyTreeService {
       adresse: member.city,
       part: 0,
       role: member.profession ?? 'Héritier arbre',
+      gender: member.gender,
       validated: member.validated ?? false,
+      isHeir: member.isHeir ?? false,
     };
   }
 
@@ -115,9 +117,10 @@ export class FamilyTreeService {
           (newHeritier: any) => {
             const persistedMember: FamilyMember = {
               ...member,
-              id: newHeritier.id || member.id,
-              personneId: newHeritier.personneId || newHeritier.id,  // Store backend personne ID
+              id: newHeritier.personneId || newHeritier.id || member.id,
+              personneId: newHeritier.personneId || newHeritier.id,
               validated: newHeritier.validated ?? member.validated ?? false,
+              isHeir: newHeritier.isHeir ?? member.isHeir ?? false,
             };
             const current = this.getAll();
             this.membersSubject.next([...current, persistedMember]);
@@ -144,7 +147,7 @@ export class FamilyTreeService {
   updateMember(updated: FamilyMember): Observable<FamilyMember> {
     if (this.useBackend && this.currentDossierId) {
       return new Observable(observer => {
-        this.apiService.updateFamilyMember(this.currentDossierId!, updated.id, updated).subscribe(
+        this.apiService.updateFamilyMember(this.currentDossierId!, updated.personneId || updated.id, updated).subscribe(
           (updatedMember: any) => {
             const current = this.getAll().map(m => m.id === updated.id ? updatedMember : m);
             this.membersSubject.next(current);

@@ -4,19 +4,24 @@ import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
+const PUBLIC_URL_FRAGMENTS = ['/consentements/repondre/token/'];
+
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
-  const token = auth.getToken();
+  const isPublic = PUBLIC_URL_FRAGMENTS.some(fragment => req.url.includes(fragment));
 
-  if (token) {
-    req = req.clone({
-      setHeaders: { Authorization: `Bearer ${token}` }
-    });
+  if (!isPublic) {
+    const token = auth.getToken();
+    if (token) {
+      req = req.clone({
+        setHeaders: { Authorization: `Bearer ${token}` }
+      });
+    }
   }
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (err.status === 401) {
+      if (err.status === 401 && !isPublic) {
         auth.logout();
       }
       return throwError(() => err);

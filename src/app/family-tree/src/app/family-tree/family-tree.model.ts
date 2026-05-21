@@ -3,6 +3,7 @@ export interface FamilyMember {
   personneId?: string;  // Backend personne ID for family tree operations
   firstName: string;
   lastName: string;
+  email?: string;
   birthYear: number;
   deathYear?: number;
   gender: 'male' | 'female';
@@ -13,6 +14,7 @@ export interface FamilyMember {
   photoInitials?: string;
   displayOrder?: number;
   validated?: boolean;
+  isHeir?: boolean;
 }
 
 export interface FamilyNode {

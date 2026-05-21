@@ -69,6 +69,12 @@ export class ApiService {
       .pipe(map(r => r.data));
   }
 
+  updateHeritier(dossierId: string, heritierId: string, req: { email?: string; part?: number }): Observable<Heritier> {
+    return this.http.patch<ApiResponse<Heritier>>(
+      `${this.base}/dossiers/${dossierId}/heritiers/${heritierId}`, req
+    ).pipe(map(r => r.data));
+  }
+
   supprimerHeritier(heritierId: string): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.base}/heritiers/${heritierId}`)
       .pipe(map(() => void 0));

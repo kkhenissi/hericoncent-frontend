@@ -37,6 +37,7 @@ export interface Connection {
 export class FamilyTreeComponent implements OnInit, OnDestroy {
   @ViewChild('svgEl') svgEl!: ElementRef<SVGSVGElement>;
   @ViewChild('svgWrapper') svgWrapper!: ElementRef<HTMLDivElement>;
+  @ViewChild('formAnchor') formAnchor!: ElementRef<HTMLDivElement>;
 
   nodes: TreeNode[] = [];
   connections: Connection[] = [];
@@ -612,9 +613,25 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
     this.selectMemberById(node.member.id);
   }
 
-  openAddForm(): void { this.editingMember = null; this.showForm = true; }
+  openAddForm(): void {
+    this.editingMember = null;
+    this.showForm = true;
+    setTimeout(() => {
+      if (this.formAnchor?.nativeElement) {
+        this.formAnchor.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 0);
+  }
 
-  openEditForm(m: FamilyMember): void { this.editingMember = { ...m }; this.showForm = true; }
+  openEditForm(m: FamilyMember): void {
+    this.editingMember = { ...m };
+    this.showForm = true;
+    setTimeout(() => {
+      if (this.formAnchor?.nativeElement) {
+        this.formAnchor.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 0);
+  }
 
   onFormSave(member: FamilyMember): void {
     const isUpdate = !!this.editingMember;
@@ -643,6 +660,37 @@ export class FamilyTreeComponent implements OnInit, OnDestroy {
   }
 
   onFormCancel(): void { this.showForm = false; this.editingMember = null; }
+
+  toggleHeir(event: MouseEvent, member: FamilyMember): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    if (member.deathYear) return;
+
+    const updated: FamilyMember = { ...member, isHeir: !member.isHeir };
+
+    // Optimistic local update
+    this.allMembers = this.allMembers.map(m => m.id === member.id ? updated : m);
+    this.svc['membersSubject'].next(this.allMembers);
+    this.cdr.markForCheck();
+
+    this.saveState();
+    this.svc.updateMember(updated).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.showSaved();
+        this.cdr.markForCheck();
+      },
+      error: (err: any) => {
+        // Revert on failure
+        this.allMembers = this.allMembers.map(m => m.id === member.id ? member : m);
+        this.svc['membersSubject'].next(this.allMembers);
+        this.error = "Erreur lors de la mise à jour de l'héritier";
+        console.error('Error toggling heir:', err);
+        setTimeout(() => { this.error = null; this.cdr.markForCheck(); }, 3000);
+        this.cdr.markForCheck();
+      }
+    });
+  }
 
   deleteMember(id: string): void {
     this.saveState();

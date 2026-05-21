@@ -282,6 +282,48 @@
     pointer-events: none;
   }
 
+  &__heir {
+    cursor: pointer;
+  }
+
+  &__heir-box {
+    fill: #fff;
+    stroke: #94a3b8;
+    stroke-width: 1.2;
+    transition: fill 0.15s, stroke 0.15s;
+  }
+
+  &__heir:hover &__heir-box {
+    stroke: #185FA5;
+  }
+
+  &__heir--checked &__heir-box {
+    fill: #185FA5;
+    stroke: #185FA5;
+  }
+
+  &__heir--disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &__heir--disabled &__heir-box {
+    fill: #e5e7eb;
+    stroke: #9ca3af;
+  }
+
+  &__heir--disabled:hover &__heir-box {
+    stroke: #9ca3af;
+  }
+
+  &__heir-check {
+    stroke: #fff;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+  }
+
   &--selected .ft-node__shape {
     fill: #E6F1FB;
     stroke: #185FA5;
@@ -301,6 +343,14 @@
     stroke-width: 3;
     animation: pulse-border 0.7s ease-in-out infinite alternate;
   }
+
+  // Décédé — rouge vif
+  &--deceased .ft-node__shape {
+    fill: #FEE2E2;
+    stroke: #DC2626;
+    stroke-width: 2;
+  }
+  &--deceased .ft-node__name { fill: #991B1B; }
 
   &:hover:not(.ft-node--male) .ft-node__shape { fill: #f0f7ff; }
 }

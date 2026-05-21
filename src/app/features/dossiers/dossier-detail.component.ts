@@ -1,7 +1,7 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DossierDetail, Heritier, Consentement } from '../../shared/models/models';
@@ -9,7 +9,7 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
 @Component({
   selector: 'app-dossier-detail',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterLink],
   template: `
     <div class="page">
       @if (loading()) {
@@ -39,7 +39,7 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
         <!-- TABS -->
         <div class="tabs">
           <button (click)="activeTab.set('heritiers')" [class.active]="activeTab() === 'heritiers'" class="tab">
-            Héritiers ({{ dossier()!.heritiers.length }})
+            Héritiers ({{ heritiersActifs().length }})
           </button>
           <button (click)="activeTab.set('consentements')" [class.active]="activeTab() === 'consentements'" class="tab">
             Consentements ({{ dossier()!.consentements.length }})
@@ -73,20 +73,49 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
               </div>
             }
 
-            <!-- Liste -->
+            <!-- Liste (uniquement les membres cochés comme héritiers dans l'arbre) -->
             <div class="cards-grid">
-              @for (h of dossier()!.heritiers; track h.id) {
-                <div class="heritier-card">
+              @for (h of heritiersActifs(); track h.id) {
+                <div class="heritier-card" [class.heritier-card--editing]="editingHeritierId() === h.id">
                   <div class="h-avatar">{{ h.nomComplet.charAt(0) }}</div>
                   <div class="h-info">
                     <div class="h-name">{{ h.nomComplet }}</div>
-                    <div class="h-email">{{ h.email || 'Email non renseigné' }}</div>
-                    <div class="h-meta">
-                      <span class="part-badge">{{ (h.part * 100).toFixed(0) }}%</span>
-                      <span class="contact-badge" [class]="'c-' + h.statutContact.toLowerCase()">
-                        {{ contactLabel(h.statutContact) }}
-                      </span>
-                    </div>
+
+                    @if (editingHeritierId() === h.id) {
+                      <!-- Mode édition -->
+                      <div class="h-edit-fields">
+                        <div class="h-edit-field">
+                          <label>Email</label>
+                          <input type="email" [(ngModel)]="editEmail" placeholder="email@exemple.com" />
+                        </div>
+                        <div class="h-edit-field">
+                          <label>Part (0–1)</label>
+                          <input type="number" [(ngModel)]="editPart" step="0.01" min="0" max="1" placeholder="0.25" />
+                        </div>
+                      </div>
+                      <div class="h-edit-actions">
+                        <button class="btn-save-heir" (click)="saveHeritier(h.id)" [disabled]="savingHeritierId() === h.id">
+                          {{ savingHeritierId() === h.id ? '...' : 'Enregistrer' }}
+                        </button>
+                        <button class="btn-cancel-heir" (click)="cancelEditHeritier()">Annuler</button>
+                      </div>
+                    } @else {
+                      <!-- Mode affichage -->
+                      <div class="h-email" [class.h-email--missing]="!h.email">
+                        {{ h.email || 'Email non renseigné' }}
+                      </div>
+                      <div class="h-meta">
+                        <span class="part-badge" [class.part-badge--zero]="!h.part">
+                          {{ h.part ? (h.part * 100).toFixed(0) + '%' : 'Part non définie' }}
+                        </span>
+                        <span class="contact-badge" [class]="'c-' + h.statutContact.toLowerCase()">
+                          {{ contactLabel(h.statutContact) }}
+                        </span>
+                      </div>
+                      @if (auth.isNotaire()) {
+                        <button class="btn-edit-heir" (click)="startEditHeritier(h)">Modifier</button>
+                      }
+                    }
                   </div>
                   @if (h.identityVerified) {
                     <div class="verified-badge" title="Identité vérifiée">✓</div>
@@ -301,10 +330,14 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
       background: #fff; border-radius: 12px; padding: 16px;
       display: flex; gap: 12px; align-items: flex-start;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-      transition: transform 0.15s;
+      transition: transform 0.15s, box-shadow 0.15s;
     }
 
-    .heritier-card:hover { transform: translateY(-2px); }
+    .heritier-card:hover:not(.heritier-card--editing) { transform: translateY(-2px); }
+
+    .heritier-card--editing {
+      box-shadow: 0 0 0 2px #c9a96e, 0 4px 16px rgba(0,0,0,0.08);
+    }
 
     .h-avatar {
       width: 40px; height: 40px; border-radius: 50%;
@@ -314,15 +347,17 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
     }
 
     .h-info { flex: 1; }
-    .h-name { font-weight: 600; color: #1a1a2e; font-size: 14px; }
-    .h-email { font-size: 12px; color: #aaa; margin: 2px 0 8px; }
+    .h-name { font-weight: 600; color: #1a1a2e; font-size: 14px; margin-bottom: 2px; }
+    .h-email { font-size: 12px; color: #888; margin: 2px 0 8px; }
+    .h-email--missing { color: #e0a060; font-style: italic; }
 
-    .h-meta { display: flex; gap: 6px; }
+    .h-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
 
     .part-badge {
       background: rgba(201,169,110,0.12); color: #b8935a;
       font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
     }
+    .part-badge--zero { background: #f5f5f5; color: #bbb; font-style: italic; }
 
     .contact-badge {
       font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
@@ -332,6 +367,38 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
     .c-contacte { background: rgba(66,153,225,0.12); color: #3182ce; }
     .c-identifie { background: rgba(72,187,120,0.12); color: #38a169; }
     .c-injoignable { background: rgba(237,137,54,0.12); color: #dd6b20; }
+
+    .btn-edit-heir {
+      margin-top: 6px; padding: 4px 12px;
+      background: none; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 11px; color: #888; cursor: pointer; transition: all 0.15s;
+    }
+    .btn-edit-heir:hover { border-color: #c9a96e; color: #b8935a; }
+
+    .h-edit-fields { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+    .h-edit-field { display: flex; flex-direction: column; gap: 3px; }
+    .h-edit-field label { font-size: 11px; font-weight: 600; color: #888; }
+    .h-edit-field input {
+      padding: 6px 10px; border: 1.5px solid #ddd; border-radius: 7px;
+      font-size: 13px; outline: none; transition: border-color 0.15s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .h-edit-field input:focus { border-color: #c9a96e; }
+
+    .h-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+    .btn-save-heir {
+      padding: 5px 14px; background: linear-gradient(135deg, #c9a96e, #b8935a);
+      border: none; border-radius: 7px; color: #fff;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-save-heir:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .btn-cancel-heir {
+      padding: 5px 12px; background: none; border: 1px solid #ddd;
+      border-radius: 7px; color: #888; font-size: 12px; cursor: pointer;
+    }
+    .btn-cancel-heir:hover { background: #f5f5f5; }
 
     .verified-badge {
       width: 22px; height: 22px; background: #38a169;
@@ -448,6 +515,12 @@ export class DossierDetailComponent implements OnInit {
   addingHeritier = signal(false);
   addingConsent = signal(false);
 
+  heritiersActifs = computed(() => (this.dossier()?.heritiers ?? []).filter(h => h.isHeir));
+  editingHeritierId = signal<string | null>(null);
+  savingHeritierId = signal<string | null>(null);
+  editEmail = '';
+  editPart: number | null = null;
+
   heritierForm = this.fb.group({
     prenom: ['', Validators.required],
     nom: ['', Validators.required],
@@ -498,6 +571,32 @@ export class DossierDetailComponent implements OnInit {
     this.api.createConsentement(this.dossierId, this.consentForm.value as any).subscribe({
       next: () => { this.consentForm.reset({ typeAction: 'VENTE' }); this.loadDossier(); this.addingConsent.set(false); },
       error: () => this.addingConsent.set(false)
+    });
+  }
+
+  startEditHeritier(h: any): void {
+    this.editingHeritierId.set(h.id);
+    this.editEmail = h.email ?? '';
+    this.editPart = h.part ?? null;
+  }
+
+  cancelEditHeritier(): void {
+    this.editingHeritierId.set(null);
+  }
+
+  saveHeritier(heritierId: string): void {
+    const payload: { email?: string; part?: number } = {};
+    if (this.editEmail?.trim()) payload.email = this.editEmail.trim();
+    if (this.editPart !== null && this.editPart !== undefined) payload.part = +this.editPart;
+
+    this.savingHeritierId.set(heritierId);
+    this.api.updateHeritier(this.dossierId, heritierId, payload).subscribe({
+      next: () => {
+        this.editingHeritierId.set(null);
+        this.savingHeritierId.set(null);
+        this.loadDossier();
+      },
+      error: () => this.savingHeritierId.set(null)
     });
   }
 
