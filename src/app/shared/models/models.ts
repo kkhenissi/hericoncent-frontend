@@ -114,6 +114,8 @@ export interface Consentement {
   reponses?: ReponseDetail[];
   dejaRepondu?: boolean;
   reponseActuelle?: string;
+  valeurEstimee?: number;
+  partHeritier?: number;
 }
 
 export type ConsentementStatut = 'EN_ATTENTE' | 'PARTIEL' | 'VALIDE' | 'REJETE' | 'EXPIRE';

@@ -88,6 +88,36 @@ import { Consentement } from '../../shared/models/models';
               </div>
             }
 
+            @if (consentement()?.valeurEstimee && consentement()!.partHeritier) {
+              <div class="estimation-card">
+                <div class="estim-title">Estimation de votre part nette</div>
+                <div class="estim-rows">
+                  <div class="estim-row">
+                    <span>Valeur estimée du bien</span>
+                    <span class="estim-val">{{ consentement()!.valeurEstimee! | currency:'EUR':'symbol':'1.0-0':'fr' }}</span>
+                  </div>
+                  <div class="estim-row estim-deduct">
+                    <span>Frais de notaire <em>(barème officiel)</em></span>
+                    <span class="estim-val red">− {{ fraisNotaire() | currency:'EUR':'symbol':'1.0-0':'fr' }}</span>
+                  </div>
+                  <div class="estim-row estim-deduct">
+                    <span>Commission plateforme <em>(5 %)</em></span>
+                    <span class="estim-val red">− {{ fraisPlateforme() | currency:'EUR':'symbol':'1.0-0':'fr' }}</span>
+                  </div>
+                  <div class="estim-separator"></div>
+                  <div class="estim-row estim-net">
+                    <span>Montant net redistribuable</span>
+                    <span class="estim-val">{{ montantNet() | currency:'EUR':'symbol':'1.0-0':'fr' }}</span>
+                  </div>
+                  <div class="estim-row estim-share">
+                    <span>Votre part <em>({{ (consentement()!.partHeritier! * 100).toFixed(0) }} %)</em></span>
+                    <span class="estim-val gold">{{ partNette() | currency:'EUR':'symbol':'1.0-0':'fr' }}</span>
+                  </div>
+                </div>
+                <div class="estim-notice">* Estimation indicative. Les frais réels peuvent varier selon le profil du bien.</div>
+              </div>
+            }
+
             <div class="legal-notice">
               <strong>⚖ Notice légale :</strong> Votre réponse sera horodatée et conservée comme preuve légale.
               Elle sera transmise au notaire responsable du dossier. Cette action est irrévocable.
@@ -262,6 +292,50 @@ import { Consentement } from '../../shared/models/models';
     .expire { color: #dd6b20; font-weight: 600; }
 
     .btn-accepter:disabled, .btn-rejeter:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+
+    /* ESTIMATION CARD */
+    .estimation-card {
+      background: #fff; border: 1px solid #e8e4de;
+      border-radius: 14px; padding: 20px; margin-bottom: 18px;
+    }
+
+    .estim-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px; font-weight: 700; color: #1a1a2e;
+      margin-bottom: 14px;
+    }
+
+    .estim-rows { display: flex; flex-direction: column; gap: 8px; }
+
+    .estim-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 13px; color: #555;
+    }
+
+    .estim-row em { font-style: normal; color: #aaa; font-size: 11px; }
+
+    .estim-deduct { color: #888; }
+
+    .estim-val { font-weight: 600; white-space: nowrap; }
+
+    .estim-val.red { color: #e05; }
+
+    .estim-val.gold {
+      font-size: 16px; font-weight: 700;
+      color: #c9a96e;
+    }
+
+    .estim-separator {
+      border-top: 1px solid #e8e4de; margin: 4px 0;
+    }
+
+    .estim-net { font-weight: 700; color: #1a1a2e; font-size: 14px; }
+
+    .estim-share { margin-top: 2px; }
+
+    .estim-notice {
+      font-size: 11px; color: #bbb; margin-top: 12px; font-style: italic;
+    }
   `]
 })
 export class RepondreTokenComponent implements OnInit {
@@ -329,5 +403,47 @@ export class RepondreTokenComponent implements OnInit {
   typeLabel(t: string): string {
     const m: Record<string, string> = { VENTE: 'Vente', PARTAGE: 'Partage', DONATION: 'Donation', MANDAT: 'Mandat', AUTRE: 'Autre' };
     return m[t] ?? t;
+  }
+
+  /** Barème officiel des frais de notaire pour l'immobilier ancien (2021+) */
+  fraisNotaire(): number {
+    const v = this.consentement()?.valeurEstimee ?? 0;
+    if (!v) return 0;
+
+    // Émoluments proportionnels (tranches réglementées)
+    const tranches = [
+      { max: 6_500,      taux: 0.03945 },
+      { max: 17_000,     taux: 0.01627 },
+      { max: 60_000,     taux: 0.01085 },
+      { max: Infinity,   taux: 0.00814 },
+    ];
+    let emoluments = 0;
+    let prev = 0;
+    for (const t of tranches) {
+      const slice = Math.min(v, t.max) - prev;
+      if (slice <= 0) break;
+      emoluments += slice * t.taux;
+      prev = t.max;
+    }
+    // TVA sur émoluments (20 %)
+    emoluments *= 1.20;
+    // Droits de mutation à titre onéreux (~5,80 %) + CSI (0,10 %)
+    const taxes = v * 0.059;
+    // Débours forfaitaires (~800 €)
+    return Math.round(emoluments + taxes + 800);
+  }
+
+  fraisPlateforme(): number {
+    return Math.round((this.consentement()?.valeurEstimee ?? 0) * 0.05);
+  }
+
+  montantNet(): number {
+    const v = this.consentement()?.valeurEstimee ?? 0;
+    return Math.max(0, v - this.fraisNotaire() - this.fraisPlateforme());
+  }
+
+  partNette(): number {
+    const part = this.consentement()?.partHeritier ?? 0;
+    return Math.round(this.montantNet() * part);
   }
 }
