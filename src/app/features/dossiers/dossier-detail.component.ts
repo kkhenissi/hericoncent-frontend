@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
-import { DossierDetail, Heritier, Consentement } from '../../shared/models/models';
+import { DossierDetail } from '../../shared/models/models';
 
 @Component({
   selector: 'app-dossier-detail',
@@ -89,13 +89,32 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
                           <input type="email" [(ngModel)]="editEmail" placeholder="email@exemple.com" />
                         </div>
                         <div class="h-edit-field">
-                          <label>Part (0–1)</label>
-                          <input type="number" [(ngModel)]="editPart" step="0.01" min="0" max="1" placeholder="0.25" />
+                          <label>
+                            Part (0–1)
+                            <span class="part-dispo">
+                              disponible : {{ partDisponible(h.id) | number:'1.0-2' }}
+                              ({{ (partDisponible(h.id) * 100) | number:'1.0-0' }}&nbsp;%)
+                            </span>
+                          </label>
+                          <input type="number" [(ngModel)]="editPart"
+                                 step="0.01" min="0" [max]="partDisponible(h.id)"
+                                 placeholder="0.25"
+                                 [class.input-error]="editPart !== null && editPart > partDisponible(h.id)" />
+                          @if (editPart !== null && editPart > partDisponible(h.id)) {
+                            <span class="part-error">
+                              Dépasse la limite — max {{ (partDisponible(h.id) * 100) | number:'1.0-0' }}&nbsp;%
+                            </span>
+                          }
                         </div>
                       </div>
+                      @if (saveHeritierError()) {
+                        <div class="save-error">{{ saveHeritierError() }}</div>
+                      }
                       <div class="h-edit-actions">
-                        <button class="btn-save-heir" (click)="saveHeritier(h.id)" [disabled]="savingHeritierId() === h.id">
-                          {{ savingHeritierId() === h.id ? '...' : 'Enregistrer' }}
+                        <button class="btn-save-heir"
+                                (click)="saveHeritier(h.id)"
+                                [disabled]="savingHeritierId() === h.id || (editPart !== null && editPart > partDisponible(h.id))">
+                          @if (savingHeritierId() === h.id) { ... } @else { Enregistrer }
                         </button>
                         <button class="btn-cancel-heir" (click)="cancelEditHeritier()">Annuler</button>
                       </div>
@@ -520,6 +539,16 @@ import { DossierDetail, Heritier, Consentement } from '../../shared/models/model
 
     .empty { text-align: center; padding: 32px; color: #bbb; font-size: 14px; }
 
+    /* PART VALIDATION */
+    .part-dispo { font-size: 11px; font-weight: 400; color: #888; margin-left: 8px; }
+    .input-error { border-color: #e53e3e !important; }
+    .part-error { font-size: 11px; color: #e53e3e; margin-top: 3px; display: block; }
+    .save-error {
+      font-size: 12px; color: #e53e3e;
+      background: rgba(229,62,62,0.08); border: 1px solid rgba(229,62,62,0.2);
+      border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+    }
+
     /* REFRESH BAR */
     .refresh-bar {
       display: flex; align-items: center; justify-content: space-between;
@@ -564,6 +593,7 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
   heritiersActifs = computed(() => (this.dossier()?.heritiers ?? []).filter(h => h.isHeir));
   editingHeritierId = signal<string | null>(null);
   savingHeritierId = signal<string | null>(null);
+  saveHeritierError = signal('');
   editEmail = '';
   editPart: number | null = null;
 
@@ -662,6 +692,16 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
 
   cancelEditHeritier(): void {
     this.editingHeritierId.set(null);
+    this.saveHeritierError.set('');
+  }
+
+  /** Part max disponible pour un héritier donné (1 - somme des autres parts) */
+  partDisponible(heritierId: string): number {
+    const heritiers = this.dossier()?.heritiers ?? [];
+    const sommeParts = heritiers
+      .filter(h => h.id !== heritierId)
+      .reduce((acc, h) => acc + (h.part ?? 0), 0);
+    return Math.max(0, Math.round((1 - sommeParts) * 10000) / 10000);
   }
 
   saveHeritier(heritierId: string): void {
@@ -669,6 +709,7 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
     if (this.editEmail?.trim()) payload.email = this.editEmail.trim();
     if (this.editPart !== null && this.editPart !== undefined) payload.part = +this.editPart;
 
+    this.saveHeritierError.set('');
     this.savingHeritierId.set(heritierId);
     this.api.updateHeritier(this.dossierId, heritierId, payload).subscribe({
       next: () => {
@@ -676,7 +717,10 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
         this.savingHeritierId.set(null);
         this.loadDossier();
       },
-      error: () => this.savingHeritierId.set(null)
+      error: (e) => {
+        this.savingHeritierId.set(null);
+        this.saveHeritierError.set(e.error?.message ?? 'Erreur lors de la sauvegarde.');
+      }
     });
   }
 

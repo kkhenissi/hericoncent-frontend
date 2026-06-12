@@ -141,7 +141,7 @@ import { Consentement } from '../../shared/models/models';
                 </button>
                 <button type="button" class="btn-accepter" [disabled]="submitting()"
                         (click)="form.patchValue({reponse: 'ACCEPTE'}); submit()">
-                  {{ submitting() ? '...' : '✓ J\'accepte' }}
+                  @if (submitting()) { ... } @else { ✓ J'accepte }
                 </button>
               </div>
             </form>
