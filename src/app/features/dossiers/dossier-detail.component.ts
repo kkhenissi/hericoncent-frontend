@@ -246,15 +246,56 @@ import { DossierDetail } from '../../shared/models/models';
         <!-- TAB: DOCUMENTS -->
         @if (activeTab() === 'documents') {
           <div class="tab-content">
+
+            @if (auth.isNotaire()) {
+              <div class="form-card">
+                <h3>Ajouter un document</h3>
+                <div class="upload-zone" (click)="fileInput.click()"
+                     [class.upload-zone--has-file]="selectedFile()">
+                  <input #fileInput type="file" hidden (change)="onFileSelected($event)" />
+                  @if (selectedFile()) {
+                    <span class="upload-filename">📄 {{ selectedFile()!.name }}</span>
+                  } @else {
+                    <span class="upload-hint">Cliquez pour sélectionner un fichier</span>
+                  }
+                </div>
+                <div class="upload-row">
+                  <select [(ngModel)]="selectedTypeDoc" class="type-select">
+                    <option value="ACTE_PROPRIETE">Acte de propriété</option>
+                    <option value="PIECE_IDENTITE">Pièce d'identité</option>
+                    <option value="ACTE_NAISSANCE">Acte de naissance</option>
+                    <option value="PROCURATION">Procuration</option>
+                    <option value="AUTRE">Autre</option>
+                  </select>
+                  <button class="btn-upload"
+                          [disabled]="!selectedFile() || uploadingDoc()"
+                          (click)="uploadDocument()">
+                    @if (uploadingDoc()) { Envoi en cours... } @else { ↑ Uploader }
+                  </button>
+                </div>
+                @if (uploadError()) {
+                  <div class="upload-error">{{ uploadError() }}</div>
+                }
+              </div>
+            }
+
             <div class="docs-list">
               @for (doc of dossier()!.documents; track doc.id) {
                 <div class="doc-row">
-                  <div class="doc-icon">📄</div>
+                  <div class="doc-icon">{{ mimeIcon(doc.mimeType) }}</div>
                   <div class="doc-info">
                     <div class="doc-nom">{{ doc.nom }}</div>
-                    <div class="doc-meta">{{ doc.typeDoc }} · {{ formatSize(doc.taille) }}</div>
+                    <div class="doc-meta">{{ typeDocLabel(doc.typeDoc) }} · {{ formatSize(doc.taille) }}</div>
                   </div>
                   <span class="doc-date">{{ doc.uploadedAt | date:'dd/MM/yyyy' }}</span>
+                  <div class="doc-actions">
+                    <button class="btn-dl" (click)="downloadDocument(doc.id, doc.nom)"
+                            title="Télécharger">⬇</button>
+                    @if (auth.isNotaire()) {
+                      <button class="btn-del-doc" (click)="deleteDocument(doc.id)"
+                              title="Supprimer">✕</button>
+                    }
+                  </div>
                 </div>
               }
               @if (dossier()!.documents.length === 0) {
@@ -517,11 +558,63 @@ import { DossierDetail } from '../../shared/models/models';
       box-shadow: 0 1px 6px rgba(0,0,0,0.04);
     }
 
-    .doc-icon { font-size: 24px; }
+    .doc-icon { font-size: 22px; }
     .doc-info { flex: 1; }
     .doc-nom { font-weight: 600; color: #1a1a2e; font-size: 14px; }
     .doc-meta { font-size: 12px; color: #aaa; margin-top: 2px; }
-    .doc-date { font-size: 12px; color: #bbb; }
+    .doc-date { font-size: 12px; color: #bbb; white-space: nowrap; }
+
+    .doc-actions { display: flex; gap: 6px; }
+
+    .btn-dl {
+      padding: 6px 10px; background: rgba(201,169,110,0.1);
+      border: 1px solid rgba(201,169,110,0.3); border-radius: 8px;
+      font-size: 14px; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-dl:hover { background: rgba(201,169,110,0.2); }
+
+    .btn-del-doc {
+      padding: 6px 10px; background: rgba(220,50,50,0.07);
+      border: 1px solid rgba(220,50,50,0.2); border-radius: 8px;
+      font-size: 12px; color: #c33; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-del-doc:hover { background: rgba(220,50,50,0.15); }
+
+    /* UPLOAD */
+    .upload-zone {
+      border: 2px dashed #e0dbd3; border-radius: 12px; padding: 24px;
+      text-align: center; cursor: pointer; transition: all 0.2s;
+      margin-bottom: 14px;
+    }
+    .upload-zone:hover, .upload-zone--has-file { border-color: #c9a96e; background: rgba(201,169,110,0.05); }
+    .upload-hint { font-size: 13px; color: #aaa; }
+    .upload-filename { font-size: 13px; color: #1a1a2e; font-weight: 600; }
+
+    .upload-row { display: flex; gap: 10px; align-items: center; }
+
+    .type-select {
+      flex: 1; padding: 10px 12px; border: 1.5px solid #ddd;
+      border-radius: 10px; font-size: 13px; font-family: 'DM Sans', sans-serif;
+      background: #fff; outline: none;
+    }
+    .type-select:focus { border-color: #c9a96e; }
+
+    .btn-upload {
+      padding: 10px 22px;
+      background: linear-gradient(135deg, #c9a96e, #e8c98a);
+      border: none; border-radius: 10px; color: #fff;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-upload:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(201,169,110,0.4); }
+
+    .upload-error {
+      margin-top: 10px; font-size: 12px; color: #e53e3e;
+      background: rgba(229,62,62,0.08); border: 1px solid rgba(229,62,62,0.2);
+      border-radius: 8px; padding: 8px 12px;
+    }
 
     /* MISC */
     .loading {
@@ -596,6 +689,12 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
   saveHeritierError = signal('');
   editEmail = '';
   editPart: number | null = null;
+
+  // Documents
+  selectedFile = signal<File | null>(null);
+  selectedTypeDoc = 'AUTRE';
+  uploadingDoc = signal(false);
+  uploadError = signal('');
 
   private pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -737,6 +836,73 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
       error: () => this.relancerLoadingId.set(null)
     });
   }
+
+  // ---- DOCUMENTS ----
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.selectedFile.set(input.files?.[0] ?? null);
+    this.uploadError.set('');
+  }
+
+  uploadDocument(): void {
+    const file = this.selectedFile();
+    if (!file) return;
+    this.uploadingDoc.set(true);
+    this.uploadError.set('');
+    this.api.uploadDocument(this.dossierId, file, this.selectedTypeDoc).subscribe({
+      next: () => {
+        this.selectedFile.set(null);
+        this.uploadingDoc.set(false);
+        this.loadDossier();
+      },
+      error: (e) => {
+        this.uploadingDoc.set(false);
+        this.uploadError.set(e.error?.message ?? 'Erreur lors de l\'upload.');
+      }
+    });
+  }
+
+  downloadDocument(docId: string, nom: string): void {
+    this.api.downloadDocument(docId).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nom;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {}
+    });
+  }
+
+  deleteDocument(docId: string): void {
+    if (!confirm('Supprimer ce document ?')) return;
+    this.api.deleteDocument(docId).subscribe({
+      next: () => this.loadDossier(),
+      error: () => {}
+    });
+  }
+
+  mimeIcon(mime?: string): string {
+    if (!mime) return '📄';
+    if (mime.startsWith('image/')) return '🖼';
+    if (mime === 'application/pdf') return '📕';
+    if (mime.includes('word')) return '📝';
+    if (mime.includes('excel') || mime.includes('spreadsheet')) return '📊';
+    return '📄';
+  }
+
+  typeDocLabel(t: string): string {
+    const m: Record<string, string> = {
+      ACTE_PROPRIETE: 'Acte de propriété', PIECE_IDENTITE: 'Pièce d\'identité',
+      ACTE_NAISSANCE: 'Acte de naissance', PROCURATION: 'Procuration', AUTRE: 'Autre'
+    };
+    return m[t] ?? t;
+  }
+
+  // ---- LABELS ----
 
   statutLabel(s: string): string {
     const m: Record<string, string> = { OUVERT: 'Ouvert', EN_VENTE: 'En vente', BLOQUE: 'Bloqué', ARCHIVE: 'Archivé', RESOLU: 'Résolu' };

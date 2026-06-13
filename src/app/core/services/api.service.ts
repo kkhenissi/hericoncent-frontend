@@ -124,9 +124,17 @@ export class ApiService {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('typeDoc', typeDoc);
-    formData.append('nom', file.name);
     return this.http.post<ApiResponse<any>>(`${this.base}/dossiers/${dossierId}/documents`, formData)
       .pipe(map(r => r.data));
+  }
+
+  downloadDocument(docId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/documents/${docId}/download`, { responseType: 'blob' });
+  }
+
+  deleteDocument(docId: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.base}/documents/${docId}`)
+      .pipe(map(() => void 0));
   }
 
   // ---- FAMILY TREE ----
