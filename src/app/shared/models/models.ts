@@ -53,7 +53,7 @@ export interface DossierDetail extends Dossier {
   documents: Document[];
 }
 
-export type DossierStatut = 'OUVERT' | 'EN_VENTE' | 'BLOQUE' | 'ARCHIVE' | 'RESOLU';
+export type DossierStatut = 'OUVERT' | 'EN_VENTE' | 'BLOQUE' | 'ARCHIVE' | 'RESOLU' | 'FERME';
 
 export interface CreateDossierRequest {
   titre: string;

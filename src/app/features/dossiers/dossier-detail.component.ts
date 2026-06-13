@@ -33,6 +33,11 @@ import { DossierDetail } from '../../shared/models/models';
                 {{ dossier()!.valeurEstimee | currency:'EUR':'symbol':'1.0-0':'fr' }}
               </div>
             }
+            @if (auth.isNotaire() && dossier()!.statut !== 'FERME') {
+              <button class="btn-fermer" (click)="showCloseModal.set(true)">
+                Fermer le dossier
+              </button>
+            }
           </div>
         </div>
 
@@ -49,11 +54,18 @@ import { DossierDetail } from '../../shared/models/models';
           </button>
         </div>
 
+        <!-- BANNIÈRE DOSSIER FERMÉ -->
+        @if (isFerme()) {
+          <div class="ferme-banner">
+            🔒 Ce dossier est fermé. Consultation seule — aucune modification n'est possible.
+          </div>
+        }
+
         <!-- TAB: HÉRITIERS -->
         @if (activeTab() === 'heritiers') {
           <div class="tab-content">
             <!-- Formulaire ajout -->
-            @if (auth.isNotaire()) {
+            @if (auth.isNotaire() && !isFerme()) {
               <div class="form-card">
                 <div class="form-card__header">
                   <h3>Ajouter un héritier</h3>
@@ -131,7 +143,7 @@ import { DossierDetail } from '../../shared/models/models';
                           {{ contactLabel(h.statutContact) }}
                         </span>
                       </div>
-                      @if (auth.isNotaire()) {
+                      @if (auth.isNotaire() && !isFerme()) {
                         <button class="btn-edit-heir" (click)="startEditHeritier(h)">Modifier</button>
                       }
                     }
@@ -152,7 +164,7 @@ import { DossierDetail } from '../../shared/models/models';
               <span class="refresh-hint">Mise à jour automatique toutes les 10s</span>
               <button class="btn-refresh" (click)="silentRefresh()" title="Actualiser maintenant">↻ Actualiser</button>
             </div>
-            @if (auth.isNotaire()) {
+            @if (auth.isNotaire() && !isFerme()) {
               <div class="form-card">
                 <h3>Créer une demande de consentement</h3>
                 <form [formGroup]="consentForm" (ngSubmit)="creerConsentement()">
@@ -221,7 +233,7 @@ import { DossierDetail } from '../../shared/models/models';
                     </div>
                   }
 
-                  @if (auth.isNotaire()) {
+                  @if (auth.isNotaire() && !isFerme()) {
                     <div class="relancer-row">
                       <button class="btn-relancer"
                               [disabled]="relancerLoadingId() === c.id"
@@ -247,7 +259,7 @@ import { DossierDetail } from '../../shared/models/models';
         @if (activeTab() === 'documents') {
           <div class="tab-content">
 
-            @if (auth.isNotaire()) {
+            @if (auth.isNotaire() && !isFerme()) {
               <div class="form-card">
                 <h3>Ajouter un document</h3>
                 <div class="upload-zone" (click)="fileInput.click()"
@@ -291,7 +303,7 @@ import { DossierDetail } from '../../shared/models/models';
                   <div class="doc-actions">
                     <button class="btn-dl" (click)="downloadDocument(doc.id, doc.nom)"
                             title="Télécharger">⬇</button>
-                    @if (auth.isNotaire()) {
+                    @if (auth.isNotaire() && !isFerme()) {
                       <button class="btn-del-doc" (click)="deleteDocument(doc.id)"
                               title="Supprimer">✕</button>
                     }
@@ -301,6 +313,40 @@ import { DossierDetail } from '../../shared/models/models';
               @if (dossier()!.documents.length === 0) {
                 <div class="empty">Aucun document uploadé.</div>
               }
+            </div>
+          </div>
+        }
+
+        <!-- MODAL FERMETURE -->
+        @if (showCloseModal()) {
+          <div class="modal-overlay" (click)="showCloseModal.set(false)">
+            <div class="modal-box" (click)="$event.stopPropagation()">
+              <div class="modal-header">
+                <h2>Fermer le dossier</h2>
+                <button class="modal-close" (click)="showCloseModal.set(false)">✕</button>
+              </div>
+              <p class="modal-intro">
+                La fermeture est définitive. Vérifiez que toutes les conditions sont remplies avant de continuer.
+              </p>
+              <ul class="close-conditions">
+                @for (cond of closeConditions(); track cond.label) {
+                  <li [class.ok]="cond.ok" [class.nok]="!cond.ok">
+                    <span class="cond-icon">{{ cond.ok ? '✓' : '✗' }}</span>
+                    {{ cond.label }}
+                  </li>
+                }
+              </ul>
+              @if (closeError()) {
+                <div class="close-error">{{ closeError() }}</div>
+              }
+              <div class="modal-actions">
+                <button class="btn-cancel" (click)="showCloseModal.set(false)">Annuler</button>
+                <button class="btn-confirm-close"
+                        [disabled]="!allConditionsMet() || closingDossier()"
+                        (click)="fermerDossier()">
+                  @if (closingDossier()) { Fermeture en cours... } @else { Confirmer la fermeture }
+                </button>
+              </div>
             </div>
           </div>
         }
@@ -337,6 +383,78 @@ import { DossierDetail } from '../../shared/models/models';
     .s-ouvert { background: rgba(72,187,120,0.12); color: #38a169; }
     .s-en_vente { background: rgba(66,153,225,0.12); color: #3182ce; }
     .s-bloque { background: rgba(237,137,54,0.12); color: #dd6b20; }
+    .s-ferme { background: rgba(113,128,150,0.12); color: #718096; }
+
+    /* BTN FERMER DOSSIER */
+    .btn-fermer {
+      padding: 7px 16px; background: rgba(229,62,62,0.06);
+      border: 1px solid rgba(229,62,62,0.3); border-radius: 10px;
+      font-size: 12px; font-weight: 700; color: #c53030;
+      cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-fermer:hover { background: rgba(229,62,62,0.12); border-color: #c53030; }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; animation: fadeIn 0.15s ease;
+    }
+    .modal-box {
+      background: #fff; border-radius: 18px; padding: 32px;
+      width: 480px; max-width: 92vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+    }
+    .modal-header h2 {
+      font-family: 'Playfair Display', serif; font-size: 20px; color: #1a1a2e; margin: 0;
+    }
+    .modal-close {
+      background: none; border: none; font-size: 16px; color: #aaa;
+      cursor: pointer; padding: 4px 8px; border-radius: 6px;
+    }
+    .modal-close:hover { background: #f5f5f5; color: #555; }
+    .modal-intro { font-size: 13px; color: #888; margin: 0 0 20px; line-height: 1.6; }
+
+    .close-conditions {
+      list-style: none; margin: 0 0 20px; padding: 0;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .close-conditions li {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    }
+    .close-conditions li.ok {
+      background: rgba(72,187,120,0.08); color: #276749;
+    }
+    .close-conditions li.nok {
+      background: rgba(229,62,62,0.06); color: #9b2c2c;
+    }
+    .cond-icon { font-size: 14px; font-weight: 800; flex-shrink: 0; }
+
+    .close-error {
+      font-size: 12px; color: #c53030;
+      background: rgba(229,62,62,0.06); border: 1px solid rgba(229,62,62,0.2);
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+    }
+
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-cancel {
+      padding: 10px 20px; background: #f5f5f5; border: none;
+      border-radius: 10px; font-size: 13px; font-weight: 600; color: #555;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-cancel:hover { background: #eee; }
+    .btn-confirm-close {
+      padding: 10px 22px; background: #c53030; border: none;
+      border-radius: 10px; font-size: 13px; font-weight: 700; color: #fff;
+      cursor: pointer; transition: background 0.2s; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-confirm-close:hover:not(:disabled) { background: #9b2c2c; }
+    .btn-confirm-close:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .valeur { font-size: 22px; font-weight: 700; color: #1a1a2e; }
 
@@ -632,6 +750,16 @@ import { DossierDetail } from '../../shared/models/models';
 
     .empty { text-align: center; padding: 32px; color: #bbb; font-size: 14px; }
 
+    /* BANNIÈRE DOSSIER FERMÉ */
+    .ferme-banner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px; margin-bottom: 20px;
+      background: rgba(113,128,150,0.08);
+      border: 1px solid rgba(113,128,150,0.25);
+      border-radius: 10px; font-size: 13px;
+      font-weight: 600; color: #4a5568;
+    }
+
     /* PART VALIDATION */
     .part-dispo { font-size: 11px; font-weight: 400; color: #888; margin-left: 8px; }
     .input-error { border-color: #e53e3e !important; }
@@ -684,11 +812,32 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
   relancerSuccessId = signal<string | null>(null);
 
   heritiersActifs = computed(() => (this.dossier()?.heritiers ?? []).filter(h => h.isHeir));
+  isFerme = computed(() => this.dossier()?.statut === 'FERME');
   editingHeritierId = signal<string | null>(null);
   savingHeritierId = signal<string | null>(null);
   saveHeritierError = signal('');
   editEmail = '';
   editPart: number | null = null;
+
+  // Fermeture dossier
+  showCloseModal = signal(false);
+  closingDossier = signal(false);
+  closeError = signal('');
+
+  closeConditions = computed(() => {
+    const d = this.dossier();
+    if (!d) return [];
+    const heritiers = d.heritiers.filter(h => h.isHeir);
+    const consentements = d.consentements;
+    const pendingExists = consentements.some(c => c.statut === 'EN_ATTENTE' || c.statut === 'PARTIEL');
+    return [
+      { label: 'Au moins un héritier est enregistré', ok: heritiers.length > 0 },
+      { label: 'Au moins une demande de consentement a été créée', ok: consentements.length > 0 },
+      { label: 'Tous les consentements sont finalisés (aucun en attente)', ok: consentements.length > 0 && !pendingExists },
+    ];
+  });
+
+  allConditionsMet = computed(() => this.closeConditions().every(c => c.ok));
 
   // Documents
   selectedFile = signal<File | null>(null);
@@ -902,10 +1051,26 @@ export class DossierDetailComponent implements OnInit, OnDestroy {
     return m[t] ?? t;
   }
 
+  fermerDossier(): void {
+    this.closingDossier.set(true);
+    this.closeError.set('');
+    this.api.changerStatutDossier(this.dossierId, 'FERME').subscribe({
+      next: () => {
+        this.showCloseModal.set(false);
+        this.closingDossier.set(false);
+        this.loadDossier();
+      },
+      error: (e) => {
+        this.closingDossier.set(false);
+        this.closeError.set(e.error?.message ?? 'Erreur lors de la fermeture du dossier.');
+      }
+    });
+  }
+
   // ---- LABELS ----
 
   statutLabel(s: string): string {
-    const m: Record<string, string> = { OUVERT: 'Ouvert', EN_VENTE: 'En vente', BLOQUE: 'Bloqué', ARCHIVE: 'Archivé', RESOLU: 'Résolu' };
+    const m: Record<string, string> = { OUVERT: 'Ouvert', EN_VENTE: 'En vente', BLOQUE: 'Bloqué', ARCHIVE: 'Archivé', RESOLU: 'Résolu', FERME: 'Fermé' };
     return m[s] ?? s;
   }
 

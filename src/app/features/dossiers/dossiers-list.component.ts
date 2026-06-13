@@ -184,6 +184,7 @@ import { Dossier } from '../../shared/models/models';
     .s-bloque { background: rgba(237,137,54,0.12); color: #dd6b20; }
     .s-archive { background: rgba(160,160,160,0.12); color: #888; }
     .s-resolu { background: rgba(130,90,200,0.12); color: #805ad5; }
+    .s-ferme { background: rgba(113,128,150,0.12); color: #718096; }
 
     .btn-detail {
       font-size: 12px; font-weight: 600; color: #c9a96e;
@@ -223,6 +224,7 @@ export class DossiersListComponent implements OnInit {
     { value: 'EN_VENTE', label: 'En vente' },
     { value: 'BLOQUE', label: 'Bloqués' },
     { value: 'ARCHIVE', label: 'Archivés' },
+    { value: 'FERME', label: 'Fermés' },
   ];
 
   total = computed(() => this.filtered().length);
@@ -249,7 +251,7 @@ export class DossiersListComponent implements OnInit {
   statutLabel(s: string): string {
     const m: Record<string, string> = {
       OUVERT: 'Ouvert', EN_VENTE: 'En vente',
-      BLOQUE: 'Bloqué', ARCHIVE: 'Archivé', RESOLU: 'Résolu'
+      BLOQUE: 'Bloqué', ARCHIVE: 'Archivé', RESOLU: 'Résolu', FERME: 'Fermé'
     };
     return m[s] ?? s;
   }
